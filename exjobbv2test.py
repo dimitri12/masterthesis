@@ -55,7 +55,7 @@ input_data = df.FreeText
 #print(df.FreeText.iloc[0])
 #output_data
 output_data = df.pout
-
+outputdata2 = run.transform_output_data(output_data,"int")
 #print(df.pout)
 '''
 
@@ -67,7 +67,7 @@ Part 1: Text Classification with OHE, BoW and TF-IDF
 
 
 '''
-
+'''
 print("##################################")
 print("Preprocessing:")
 print("----------------------------------")
@@ -81,7 +81,7 @@ print("----------------------------------")
 outputdata = run.transform_output_data(output_data)
 outputdata2 = run.transform_output_data(output_data,"int")
 #glömde detta:
-input_data = preproc1
+input_data = preproc2
 #print(outputdata2)
 print("Inverse Transforming:")
 inv_output = run.inverse_transform_output_data(outputdata.NewPout)
@@ -93,9 +93,9 @@ print("----------------------------------")
 bag_of_words2 = run.text_processing(input_data,outputdata2, None, 1)
 tf_idf2 = run.text_processing(input_data,outputdata2, "tfidf", 1)
 data_array = [bag_of_words2,tf_idf2]
-print(one_hot2)
+print(tf_idf2)
 print("Embedding/Encoding/Processing is finished")
-'''
+
 print("##################################")
 print("Modeling:")
 print("----------------------------------")
@@ -157,19 +157,9 @@ result_ensemble_acc[0],result_ensemble_acc[1],result_ensemble_acc[2]]
 run.plot_metrics(run.create_plot_data(result_acc,None))
 #plot auc roc curve
 '''
-print("##################################")
-print("Done")
-
-'''
 
 
 
-Part 2: Word Embeddings using Word2Vec,Fasttext and ANNs with LSTM, GRU and CNN
-
-
-
-
-'''
 '''
 ########################################
 ## index word vectors
@@ -238,3 +228,28 @@ plt.xlabel('epoch')
 plt.legend(['train'], loc='upper left')
 plt.show()
 '''
+'''
+
+
+
+Part 2: Word Embeddings using Word2Vec,Fasttext and ANNs with LSTM, GRU and CNN
+
+
+
+
+'''
+labels = list(df)
+labels.remove('FreeText')
+#output_data = df[labels].values
+outputdata = run.transform_output_data(output_data,'int')
+'''
+X = np.array(input_data)
+Y = np.array(output_data)
+print(X.shape)
+print('-'*40)
+print(Y.shape)
+'''
+#print(outputdata)
+test = run.word_embeddings(input_data, output_data)
+print("##################################")
+print("Done")

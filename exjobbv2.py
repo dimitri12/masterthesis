@@ -76,11 +76,11 @@ NB_WORDS = 20  # Parameter indicating the number of words we'll put in the dicti
 VAL_SIZE = 10  # Size of the validation set (originally 1000)
 NB_START_EPOCHS = 20  # Number of epochs we usually start to train with
 BATCH_SIZE = 512  # Size of the batches used in the mini-batch gradient descent
-MAX_LEN = 24  # Maximum number of words in a sequence
+MAX_LEN = 19  # Maximum number of words in a sequence
 GLOVE_DIM = 50  # Number of dimensions of the GloVe word embeddings
 MAX_SEQUENCE_LENGTH = 30
-MAX_NB_WORDS = 2000
-EMBEDDING_DIM = 300
+MAX_NB_WORDS = 20000
+EMBEDDING_DIM = 100
 VALIDATION_SPLIT = 0.1
 act = 'relu'
 re_weight = True
@@ -485,67 +485,84 @@ def ROCCurves(true,pred,encoding, method):
     return None
 #perform word embeddings inputs: dataframe input data and output data; output: embedded data such as X train and test and y train and test
 def word_embeddings(input_data, output_data):
+    '''
+    #create validation data
+    val_data = input_data.sample(frac=0.2,random_state=1)
+    train_data = input_data.drop(val_data.index)
+    '''
     data = feature_engineering(input_data, output_data)
+    assert data[0].shape[0] == data[2].shape[0]
+    assert data[1].shape[0] == data[3].shape[0]
     data_in1 = tokenizer(data[0], data[1])
     data_in2 = padding(data_in1[0], data_in1[1])
-    data_out = we_output_data_transform(data[2], data[3],'label')
+    
+    
+    data_out = we_output_data_transform(data[2],data[3],'int')
+    #create validation data
+    MAX_LEN = input_data.shape[0]
     data2 = feature_engineering(data_in2[0], data_out[0])
-    #validation data
     assert data2[1].shape[0] == data2[3].shape[0]
     assert data2[0].shape[0] == data2[2].shape[0]
-    print("Embedded X_train" + data2[0])
-    print("Embedded X_test"  + data2[1])
-    print("Embedded y_train" + data2[2])
-    print("Embedded y_test"  + data2[3])
-    #create validation data
-    X_val = data2[0].samples(frac=0.2,random_state=1)
-    data_out1 = we_output_data_transform(data[2], data[3],None)
+
+   
+    #print(data_in1[2])
+    
+    
     #fasttext (word_to_vec_map, word_to_index, index_to_words, vocab_size, dim)
     #tip: try to swap the file with cc.sv.300.vec
-    array = load_vectors2('data/fasttext/sv.vecs')
+    array = load_vectors2('./data/fasttext/sv.vec')
+    
     model = cnn1((MAX_LEN,), array[0], array[1])
     #try and remove np.array function if it doesn't work
-    X_vec = sentences_to_indices(np.array(input_data), array[1], MAX_LEN)
-    X_test_vec = sentences_to_indices(data[1], array[1], MAX_LEN)
+    #X_vec = sentences_to_indices(np.array(data_in2[0]), array[1], MAX_LEN)
+    #X_test_vec = sentences_to_indices(data_in2[1], array[1], MAX_LEN)
+    
     encode = OneHotEncoder(sparse=False)
     Y = np.array(output_data)
     Y = encode.fit_transform(np.reshape(Y, (Y.shape[0], 1)))
-    track = model.fit(X_vec, Y, batch_size=128, epochs=9)
-    plot_function(track)
-    preds = model.predict(X_test_vec, batch_size=128, verbose=1)
-    #word2vec
-    embedding_layer=load_vectors_word2vec('sv.bin',data_in1[2])
-    #you can swap data[0].shape[1] for MAX_LEN
-    model1 = cnn2(embedding_layer, data[0].shape[1])
+    
     adam = Adam(lr=1e-3)
+    model.compile(loss='categorical_crossentropy',optimizer=adam,metrics=['acc'])
+    track = model.fit(data_in2[0], data_out[0], batch_size=128, epochs=9)
+    plot_function(track)
+    preds = model.predict(data_in2[1], batch_size=128, verbose=1)
+    #word2vec
+    embedding_layer=load_vectors_word2vec('./data/word2vec/sv.bin',data_in1[2])
+    #you can swap data[0].shape[1] for MAX_LEN
+    model1 = cnn2(embedding_layer, data_in2[0].shape[1])
+    
     model1.compile(loss='categorical_crossentropy',optimizer=adam,metrics=['acc'])
     callbacks = [EarlyStopping(monitor='val_loss')]
     #we can use validation data for our model
-    track1 = model1.fit(data[0], data[2], batch_size=1000, epochs=10, verbose=1, validation_data=(X_val, data_out1[1]),callbacks=callbacks)
+    track1 = model1.fit(data_in2[0], data_out[0], batch_size=1000, epochs=10, verbose=1, validation_data=(data2[0], data2[2]),callbacks=callbacks)
     plot_function(track1)
     y_pred=model1.predict(data_in2[1])
     #GRU
-    GRU_model = gru_model(data2[0].shape[1])
+    GRU_model = gru_model()
     # Train
-    track2 = GRU_model.fit(data2[0], data2[2], epochs=3, batch_size=64)
+    track2 = GRU_model.fit(data_in2[0], data_out[0], epochs=3, batch_size=64)
     plot_function(track2)
     # Final evaluation of the model
     scores = GRU_model.evaluate(data2[1], data2[3], verbose=0)
     print("Accuracy: %.2f%%" % (scores[1]*100))
     # Predict the label for test data
-    y_predict = GRU_model.predict(data2[1])
+    y_predict = GRU_model.predict(data_in2[1])
     #LSTM
-    LSTM_model = lstm_model(data2[0].shape[1])
+    LSTM_model = lstm_model()
     # Train
-    track3 = LSTM_model.fit(data2[0], data2[2], epochs=3, batch_size=64)
+    track3 = LSTM_model.fit(data_in2[0], data_out[0], epochs=3, batch_size=64)
     plot_function(track3)
     # Final evaluation of the model
     scores1 = LSTM_model.evaluate(data2[1], data2[3], verbose=0)
     print("Accuracy: %.2f%%" % (scores1[1]*100))
     # Predict the label for test data
-    y_predict1 = LSTM_model.predict(data2[1])
+    y_predict1 = LSTM_model.predict(data_in2[1])
     #CNN1,CNN2,LSTM,GRU
     result = [preds,y_pred,y_predict,y_predict1]
+    
+    #result = [data[0],data[1],data[2],data[3]]
+    
+    #result=None
     return result
 
 def plot_function(track):
@@ -655,22 +672,22 @@ def test_model(model, X_train, y_train, X_test, y_test, epoch_stop):
 #in [7] padding is used to fill out null values
 def padding(trained_seq, test_seq):
     #you can change MAX_LEN to train_data.shape[1]
-    trained_seq_trunc = pad_sequences(trained_seq, maxlen=MAX_LEN)
+    trained_seq_trunc = pad_sequences(trained_seq)
     test_seq_trunc = pad_sequences(test_seq, maxlen=MAX_LEN)
     result = [trained_seq_trunc, test_seq_trunc]
     return result
 
-def we_output_data_transform(train_data, test_data,encoding):
-    if encoding == 'label':
-        le = LabelEncoder()
-        y_train_le = le.fit_transform(train_data)
-        y_test_le = le.transform(test_data)
-        y_train_oh = to_categorical(y_train_le)
-        y_test_oh = to_categorical(y_test_le)
+def we_output_data_transform(ytrain_data,ytest_data,encoding=None):
+    if encoding == None:
+        y_data1 = to_categorical(np.asarray(ytrain_data))
+        y_data2 = to_categorical(np.asarray(ytest_data))
     else:
-        y_train_oh = to_categorical(np.asarray(train_data))
-        y_test_oh = to_categorical(np.asarray(test_data))
-    result = [y_train_oh, y_test_oh]
+        le = LabelEncoder()
+        y_train_le = le.fit_transform(ytrain_data)
+        y_data1 = to_categorical(y_train_le)
+        y_test_le = le.fit_transform(ytest_data)
+        y_data2 = to_categorical(y_test_le)
+    result = [y_data1,y_data2]
     return result
 
 #embeddings layer
@@ -718,9 +735,8 @@ def load_vectors2(fname):
 #from[8]
 def sentences_to_indices(X, word_to_index, maxLen):
     m = X.shape[0]                                   # number of training examples
-    
+    print(m)
     X_indices = np.zeros((m, maxLen))
-    
     for i in range(m):
         sentence_words = X[i].lower().strip().split()
         j = 0
@@ -734,11 +750,11 @@ def sentences_to_indices(X, word_to_index, maxLen):
 
 #for Word2Vec input word2vec .bin file and word_index = tokenizer.word_index from tokenizer
 def load_vectors_word2vec(fname,word_index):
-    word_vectors = KeyedVectors.load_word2vec_format(fname, binary=True)
-    
-    vocabulary_size = min(len(word_index)+1, len(word_index))+1
+    word_vectors = KeyedVectors.load(fname)
+    vocabulary_size = min(MAX_NB_WORDS, len(word_index))+1
+    print(vocabulary_size)
     embedding_matrix = np.zeros((vocabulary_size, EMBEDDING_DIM))
-   
+    
     for word, i in word_index.items():
         if i>=MAX_NB_WORDS:
             continue
@@ -753,7 +769,8 @@ def load_vectors_word2vec(fname,word_index):
 #[8]
 def pretrained_embedding_layer(word_to_vec_map, word_to_index):
     vocab_len = len(word_to_index) + 1
-    emb_dim = word_to_vec_map["cucumber"].shape[0]
+    #emb_dim = word_to_vec_map["cucumber"].shape[0]
+    emb_dim = 300
     '''
     #or
     emb_dim = 300
@@ -772,21 +789,22 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index):
 
 def cnn2(embedding_layer, input_shape):
     sentence_indices = Input(shape=(input_shape,))
+
     embedding = embedding_layer(sentence_indices)
     reshape = Reshape((input_shape,EMBEDDING_DIM,1))(embedding)
     conv_0 = Conv2D(num_filters, (filter_sizes[0], EMBEDDING_DIM),activation='relu',kernel_regularizer=regularizers.l2(0.01))(reshape)
     conv_1 = Conv2D(num_filters, (filter_sizes[1], EMBEDDING_DIM),activation='relu',kernel_regularizer=regularizers.l2(0.01))(reshape)
     conv_2 = Conv2D(num_filters, (filter_sizes[2], EMBEDDING_DIM),activation='relu',kernel_regularizer=regularizers.l2(0.01))(reshape)
 
-    maxpool_0 = MaxPooling2D((sentence_indices - filter_sizes[0] + 1, 1), strides=(1,1))(conv_0)
-    maxpool_1 = MaxPooling2D((sentence_indices - filter_sizes[1] + 1, 1), strides=(1,1))(conv_1)
-    maxpool_2 = MaxPooling2D((sentence_indices - filter_sizes[2] + 1, 1), strides=(1,1))(conv_2)
+    maxpool_0 = MaxPooling2D((input_shape - filter_sizes[0] + 1, 1), strides=(1,1))(conv_0)
+    maxpool_1 = MaxPooling2D((input_shape - filter_sizes[1] + 1, 1), strides=(1,1))(conv_1)
+    maxpool_2 = MaxPooling2D((input_shape - filter_sizes[2] + 1, 1), strides=(1,1))(conv_2)
 
     merged_tensor = concatenate([maxpool_0, maxpool_1, maxpool_2], axis=1)
     flatten = Flatten()(merged_tensor)
     reshape = Reshape((3*num_filters,))(flatten)
     dropout = Dropout(drop)(flatten)
-    output = Dense(units=3, activation='softmax',kernel_regularizer=regularizers.l2(0.01))(dropout)
+    output = Dense(units=4, activation='softmax',kernel_regularizer=regularizers.l2(0.01))(dropout)
 
     # this creates a model that includes
     model = Model(sentence_indices, output)
@@ -795,14 +813,10 @@ def cnn2(embedding_layer, input_shape):
 #from [8] a CNN approach
 def cnn1(input_shape, word_to_vec_map, word_to_index):
     
-    #alternative1
     sentence_indices = Input(shape=input_shape, dtype='int32')
     embedding_layer = pretrained_embedding_layer(word_to_vec_map, word_to_index)
     embeddings = embedding_layer(sentence_indices) 
 
-    
-    
-    #alternative1
     X1 = Conv1D(128, 3)(embeddings)
     X2 = Conv1D(128, 3)(embeddings)
     X1 = MaxPooling1D(pool_size=4)(X1)
@@ -811,27 +825,27 @@ def cnn1(input_shape, word_to_vec_map, word_to_index):
     X = GRU(units=128, dropout=0.4, return_sequences=True)(X)
     X = LSTM(units=128, dropout=0.3)(X)
     X = Dense(units = 32, activation="relu")(X)
-    X = Dense(units=5, activation='softmax')(X)
+    X = Dense(units=4, activation='softmax')(X)
     model = Model(inputs=sentence_indices, outputs=X)
     print(model.summary())
     return model
 
-def gru_model(df):
+def gru_model():
     model = Sequential()
-    model.add(Embedding(NB_WORDS, 100, input_length=df.shape[1]))
+    model.add(Embedding(NB_WORDS, 100, input_length=MAX_LEN))
     model.add(GRU(100))
-    model.add(Dense(1, activation='sigmoid'))
+    model.add(Dense(4, activation='sigmoid'))
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
     print(model.summary())
     
     return model
 
-def lstm_model(df):
+def lstm_model():
     model = Sequential()
-    model.add(Embedding(NB_WORDS, embed_dim,input_length = df.shape[1]))
+    model.add(Embedding(NB_WORDS, embed_dim,input_length = MAX_LEN))
     model.add(SpatialDropout1D(0.4))
     model.add(LSTM(lstm_out, dropout=0.2, recurrent_dropout=0.2))
-    model.add(Dense(2,activation='softmax'))
+    model.add(Dense(4,activation='softmax'))
     model.compile(loss = 'categorical_crossentropy', optimizer='adam',metrics = ['accuracy'])
     print(model.summary())
     

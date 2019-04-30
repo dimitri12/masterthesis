@@ -490,79 +490,103 @@ def word_embeddings(input_data, output_data):
     val_data = input_data.sample(frac=0.2,random_state=1)
     train_data = input_data.drop(val_data.index)
     '''
-    data = feature_engineering(input_data, output_data)
+    data_out = we_output_data_transform(output_data,'int')
+    data = feature_engineering(input_data, data_out)
+    #index 0 = X_train
+    #index 1 = X_test
+    #index 2 = y_train
+    #index 3 = y_test
     assert data[0].shape[0] == data[2].shape[0]
     assert data[1].shape[0] == data[3].shape[0]
     data_in1 = tokenizer(data[0], data[1])
     data_in2 = padding(data_in1[0], data_in1[1])
     
     
-    data_out = we_output_data_transform(data[2],data[3],'int')
+    
     #create validation data
+    global MAX_LEN
     MAX_LEN = input_data.shape[0]
-    data2 = feature_engineering(data_in2[0], data_out[0])
+    data2 = feature_engineering(data_in2[0], data[2])
     assert data2[1].shape[0] == data2[3].shape[0]
     assert data2[0].shape[0] == data2[2].shape[0]
-
-   
-    #print(data_in1[2])
     
-    
+    '''
     #fasttext (word_to_vec_map, word_to_index, index_to_words, vocab_size, dim)
-    #tip: try to swap the file with cc.sv.300.vec
+    #tip: try to swap the sv.vec file with cc.sv.300.vec
+    
+    
+    callbacks = [EarlyStopping(monitor='val_loss')]
+
+    #load fasttext data into cnn1
     array = load_vectors2('./data/fasttext/sv.vec')
-    
-    model = cnn1((MAX_LEN,), array[0], array[1])
-    #try and remove np.array function if it doesn't work
-    #X_vec = sentences_to_indices(np.array(data_in2[0]), array[1], MAX_LEN)
-    #X_test_vec = sentences_to_indices(data_in2[1], array[1], MAX_LEN)
-    
-    encode = OneHotEncoder(sparse=False)
-    Y = np.array(output_data)
-    Y = encode.fit_transform(np.reshape(Y, (Y.shape[0], 1)))
-    
+    embedding_layer1 = pretrained_embedding_layer(array[0], array[1])
+    embedding_layer=load_vectors_word2vec('./data/word2vec/sv.bin',data_in1[2])
+    #change data_in2[0].shape[1] with (MAX_LEN,)
+    model = cnn1((MAX_LEN,),embedding_layer1)
     adam = Adam(lr=1e-3)
     model.compile(loss='categorical_crossentropy',optimizer=adam,metrics=['acc'])
-    track = model.fit(data_in2[0], data_out[0], batch_size=128, epochs=9)
+    track = model.fit(data_in2[0], data[2], batch_size=128, epochs=10, verbose=1, validation_data=(data2[0], data2[2]),callbacks=callbacks)
     plot_function(track)
-    preds = model.predict(data_in2[1], batch_size=128, verbose=1)
-    #word2vec
-    embedding_layer=load_vectors_word2vec('./data/word2vec/sv.bin',data_in1[2])
-    #you can swap data[0].shape[1] for MAX_LEN
-    model1 = cnn2(embedding_layer, data_in2[0].shape[1])
-    
+    preds = model.predict(data_in2[1])
+    scores = model.evaluate(data_in2[1], data[3], verbose=1)
+    print("Accuracy: %.2f%%" % (scores[1]*100))
+
+    #word2vec data on cnn2
+    #you can swap data_in2[0].shape[1] for MAX_LEN
+    model1 = cnn2(data_in2[0].shape[1],embedding_layer)
     model1.compile(loss='categorical_crossentropy',optimizer=adam,metrics=['acc'])
-    callbacks = [EarlyStopping(monitor='val_loss')]
     #we can use validation data for our model
-    track1 = model1.fit(data_in2[0], data_out[0], batch_size=1000, epochs=10, verbose=1, validation_data=(data2[0], data2[2]),callbacks=callbacks)
-    plot_function(track1)
+    track2 = model1.fit(data_in2[0], data[2], batch_size=1000, epochs=10, verbose=1, validation_data=(data2[0], data2[2]),callbacks=callbacks)
+    plot_function(track2)
     y_pred=model1.predict(data_in2[1])
+    scores = model1.evaluate(data_in2[1], data[3], verbose=1)
+    print("Accuracy: %.2f%%" % (scores[1]*100))
+
+    #word2vec on cnn1
+    model2 = cnn1((MAX_LEN,),embedding_layer)
+    adam = Adam(lr=1e-3)
+    model2.compile(loss='categorical_crossentropy',optimizer=adam,metrics=['acc'])
+    track3 = model2.fit(data_in2[0], data[2], batch_size=128, epochs=10, verbose=1, validation_data=(data2[0], data2[2]),callbacks=callbacks)
+    plot_function(track3)
+    preds1 = model2.predict(data_in2[1])
+    scores = model2.evaluate(data_in2[1], data[3], verbose=1)
+    print("Accuracy: %.2f%%" % (scores[1]*100))
+
+    
     #GRU
     GRU_model = gru_model()
     # Train
-    track2 = GRU_model.fit(data_in2[0], data_out[0], epochs=3, batch_size=64)
+    track2 = GRU_model.fit(data_in2[0], data[2], epochs=3, batch_size=64)
     plot_function(track2)
-    # Final evaluation of the model
-    scores = GRU_model.evaluate(data2[1], data2[3], verbose=0)
-    print("Accuracy: %.2f%%" % (scores[1]*100))
+    
     # Predict the label for test data
     y_predict = GRU_model.predict(data_in2[1])
+    # Final evaluation of the model
+    scores = GRU_model.evaluate(data_in2[1], data[3], verbose=1)
+    print("Accuracy: %.2f%%" % (scores[1]*100))
+
     #LSTM
     LSTM_model = lstm_model()
     # Train
-    track3 = LSTM_model.fit(data_in2[0], data_out[0], epochs=3, batch_size=64)
+    track3 = LSTM_model.fit(data_in2[0], data[2], epochs=3, batch_size=64)
     plot_function(track3)
-    # Final evaluation of the model
-    scores1 = LSTM_model.evaluate(data2[1], data2[3], verbose=0)
-    print("Accuracy: %.2f%%" % (scores1[1]*100))
     # Predict the label for test data
     y_predict1 = LSTM_model.predict(data_in2[1])
+    # Final evaluation of the model
+    scores1 = LSTM_model.evaluate(data_in2[1], data[3], verbose=1)
+    print("Accuracy: %.2f%%" % (scores1[1]*100))
+
     #CNN1,CNN2,LSTM,GRU
-    result = [preds,y_pred,y_predict,y_predict1]
+    preds = preds.argmax(axis=-1)
+    preds1 = preds1.argmax(axis=-1)
+    y_pred = y_pred.argmax(axis=-1)
+    y_predict = y_predict.argmax(axis=-1)
+    y_predict1 = y_predict1.argmax(axis=-1)
+    result = [preds,y_pred,preds1,y_predict,y_predict1]
     
     #result = [data[0],data[1],data[2],data[3]]
-    
-    #result=None
+    '''
+    result=None
     return result
 
 def plot_function(track):
@@ -677,17 +701,14 @@ def padding(trained_seq, test_seq):
     result = [trained_seq_trunc, test_seq_trunc]
     return result
 
-def we_output_data_transform(ytrain_data,ytest_data,encoding=None):
+def we_output_data_transform(y_data,encoding=None):
     if encoding == None:
-        y_data1 = to_categorical(np.asarray(ytrain_data))
-        y_data2 = to_categorical(np.asarray(ytest_data))
+        y_data = to_categorical(np.asarray(y_data))
     else:
         le = LabelEncoder()
-        y_train_le = le.fit_transform(ytrain_data)
-        y_data1 = to_categorical(y_train_le)
-        y_test_le = le.fit_transform(ytest_data)
-        y_data2 = to_categorical(y_test_le)
-    result = [y_data1,y_data2]
+        y_train_le = le.fit_transform(y_data)
+        y_data = to_categorical(y_train_le)
+    result = y_data
     return result
 
 #embeddings layer
@@ -787,10 +808,12 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index):
     
     return embedding_layer
 
-def cnn2(embedding_layer, input_shape):
+def cnn2(input_shape,embedding_layer1):
+    print(input_shape)
     sentence_indices = Input(shape=(input_shape,))
-
-    embedding = embedding_layer(sentence_indices)
+    
+    embedding = embedding_layer1(sentence_indices)
+    
     reshape = Reshape((input_shape,EMBEDDING_DIM,1))(embedding)
     conv_0 = Conv2D(num_filters, (filter_sizes[0], EMBEDDING_DIM),activation='relu',kernel_regularizer=regularizers.l2(0.01))(reshape)
     conv_1 = Conv2D(num_filters, (filter_sizes[1], EMBEDDING_DIM),activation='relu',kernel_regularizer=regularizers.l2(0.01))(reshape)
@@ -804,18 +827,18 @@ def cnn2(embedding_layer, input_shape):
     flatten = Flatten()(merged_tensor)
     reshape = Reshape((3*num_filters,))(flatten)
     dropout = Dropout(drop)(flatten)
-    output = Dense(units=4, activation='softmax',kernel_regularizer=regularizers.l2(0.01))(dropout)
+    output = Dense(units=5, activation='softmax',kernel_regularizer=regularizers.l2(0.01))(dropout)
 
     # this creates a model that includes
     model = Model(sentence_indices, output)
     print(model.summary())
     return model
 #from [8] a CNN approach
-def cnn1(input_shape, word_to_vec_map, word_to_index):
+def cnn1(input_shape,embedding_layer1):
     
     sentence_indices = Input(shape=input_shape, dtype='int32')
-    embedding_layer = pretrained_embedding_layer(word_to_vec_map, word_to_index)
-    embeddings = embedding_layer(sentence_indices) 
+
+    embeddings = embedding_layer1(sentence_indices) 
 
     X1 = Conv1D(128, 3)(embeddings)
     X2 = Conv1D(128, 3)(embeddings)
@@ -825,7 +848,7 @@ def cnn1(input_shape, word_to_vec_map, word_to_index):
     X = GRU(units=128, dropout=0.4, return_sequences=True)(X)
     X = LSTM(units=128, dropout=0.3)(X)
     X = Dense(units = 32, activation="relu")(X)
-    X = Dense(units=4, activation='softmax')(X)
+    X = Dense(units=5, activation='softmax')(X)
     model = Model(inputs=sentence_indices, outputs=X)
     print(model.summary())
     return model
@@ -834,7 +857,7 @@ def gru_model():
     model = Sequential()
     model.add(Embedding(NB_WORDS, 100, input_length=MAX_LEN))
     model.add(GRU(100))
-    model.add(Dense(4, activation='sigmoid'))
+    model.add(Dense(5, activation='sigmoid'))
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
     print(model.summary())
     
@@ -845,7 +868,7 @@ def lstm_model():
     model.add(Embedding(NB_WORDS, embed_dim,input_length = MAX_LEN))
     model.add(SpatialDropout1D(0.4))
     model.add(LSTM(lstm_out, dropout=0.2, recurrent_dropout=0.2))
-    model.add(Dense(4,activation='softmax'))
+    model.add(Dense(5,activation='softmax'))
     model.compile(loss = 'categorical_crossentropy', optimizer='adam',metrics = ['accuracy'])
     print(model.summary())
     

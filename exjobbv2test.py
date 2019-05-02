@@ -42,7 +42,7 @@ print("Test Code")
 
 Part 1: Text Classification with BoW and TF-IDF
 
-
+#CHALLENGE: solve the multiclass classification problem
 
 
 '''
@@ -52,10 +52,10 @@ df = pd.read_csv("testdata_exjobb.csv", encoding='ISO-8859-1')
 #input_data
 #print(df.FreeText.head())
 '''
-Perform an Explanatory data analysis
+Perform an Explorative data analysis
 '''
-print("EDA")
-run.eda(df)
+
+#run.eda(df)
 input_data = df.FreeText
 #print(df.FreeText.iloc[0])
 #output_data

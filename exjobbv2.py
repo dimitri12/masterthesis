@@ -428,6 +428,10 @@ def predictor(data_array,method):
         res_BoW = initiate_predictions(data_array[0],method)
         res_tfidf = initiate_predictions(data_array[1],method)
         result = [res_BoW,res_tfidf]
+    elif method == 'gb':
+        GBres_BoW = initiate_predictions(data_array[0],method)
+        GBres_tfidf = initiate_predictions(data_array[1],method)
+        result = [GBres_BoW,GBres_tfidf]
     else:
         logres_BoW = initiate_predictions(data_array[0],method)
         logres_tfidf = initiate_predictions(data_array[1],method)
@@ -445,6 +449,8 @@ def generate_metrics(result,clf=None):
         val = 'Random Forest'
     elif clf == 'ensemble':
         val = 'Ensemble'
+    elif clf == 'gb':
+        val = 'Gradient Boosting'
     else:
         val = 'logistic regression'
     print('Metrics from Bag of Words on '+ val +':')
@@ -474,6 +480,8 @@ def train_predict_model(classifier,X_train,X_test, y_train, y_test):
         model2 = MultinomialNB()
         model3 = RandomForestClassifier(n_estimators=50, random_state=1)
         model = VotingClassifier(estimators=[('lr', model1), ('nb', model2), ('rf', model3)], voting='hard')
+    elif classifier == 'gb':
+        model = XGBClassifier(n_estimators=100)
     else:
         model = LogisticRegression()
     model.fit(X_train, y_train)
@@ -482,8 +490,9 @@ def train_predict_model(classifier,X_train,X_test, y_train, y_test):
     
     acc = metrics.accuracy_score(y_test,predicted)
     acc = acc*100
+    loss = log_loss(y_test,predicted)
     plot_roc(predicted, y_test)
-    result = [predicted,acc]
+    result = [predicted,acc,loss]
     return result    
 def initiate_predictions(train_test_data,method):
     X_train = train_test_data[0]
@@ -494,7 +503,8 @@ def initiate_predictions(train_test_data,method):
     predicted = prediction[0]
     acc = prediction[1]
     true = y_test
-    result = [true,predicted,acc]
+    loss = prediction[2]
+    result = [true,predicted,acc,loss]
     return result
 def result_from_predicitions(prediction_array):
     '''
@@ -572,18 +582,26 @@ def create_plot_data(prediction_array,method):
 #[6] plot data
 #plt.cm.RdYlBu
 def plot_metrics(result_frame):
+    plt.subplot(221)
     sns.set_color_codes("muted")
-    sns.barplot(x='Method', y='Accuracy', data=result_frame, color="r")
-
+    sns.barplot(x='Method', y='Accuracy', data=result_frame[0], color="r")
     plt.xlabel('Accuracy Method')
     plt.title('Classifier Accuracy Percent')
+
+    plt.subplot(222)
+    sns.set_color_codes("muted")
+    sns.barplot(x='Method', y='loss', data=result_frame[1], color="b")
+    plt.xlabel('Loss Method')
+    plt.title('Classifier Loss Percent')
     plt.show()
+
 #AUCROC index 2
 def plot_roc(y_pred, y_test):
     fpr, tpr, _ = roc_curve(y_test, y_pred)
-    plt.plot(fpr, tpr)
     plt.xlabel('FPR')
     plt.ylabel('TPR')
+    plt.plot(fpr, tpr)
+    plt.show()
 #perform predictions on classification methods
 def clf_predictor(data_array):
     result_logregr = predictor(data_array,None)
@@ -592,7 +610,7 @@ def clf_predictor(data_array):
     result_SVM = predictor(data_array,'SVM')
     result_RF = predictor(data_array,'RF')
     result_ensemble = predictor(data_array,'ensemble')
-
+    result_GB = predictor(data_array,'gb')
     print("Evaluation of predictions:")
     print("----------------------------------")
     generate_metrics(result_logregr)
@@ -600,38 +618,59 @@ def clf_predictor(data_array):
     print("Logistic Regression:")
     print("----------------------------------")
     result_logres_acc = [result_logregr[0][2],result_logregr[1][2]]
+    result_logres_loss = [result_logregr[0][3],result_logregr[1][3]]
     print("----------------------------------")
     print("Naive Bayes (Gaussian):")
     generate_metrics(result_NBG,'NBG')
     result_NBG_acc = [result_NBG[0][2],result_NBG[1][2]]
+    result_NBG_loss = [result_NBG[0][3],result_NBG[1][3]]
     print("----------------------------------")
     print("Naive Bayes (Multinomial):")
     print("----------------------------------")
     generate_metrics(result_NBM,'NBM')
     result_NBM_acc = [result_NBM[0][2],result_NBM[1][2]]
+    result_NBM_loss = [result_NBM[0][3],result_NBM[1][3]]
     print("----------------------------------")
     print("Support Vector Machine:")
     print("----------------------------------")
     generate_metrics(result_SVM,'SVM')
     result_SVM_acc = [result_SVM[0][2],result_SVM[1][2]]
+    result_SVM_loss = [result_SVM[0][3],result_SVM[1][3]]
+    print("----------------------------------")
+    print("Gradient Boosting")
+    print("----------------------------------")
+    generate_metrics(result_GB,'gb')
+    result_GB_acc = [result_GB[0][2],result_GB[1][2]]
+    result_GB_loss = [result_GB[0][3],result_GB[1][3]]
     print("----------------------------------")
     print("Random Forest:")
     print("----------------------------------")
     generate_metrics(result_RF,'RF')
     result_RF_acc = [result_RF[0][2],result_RF[1][2]]
+    result_RF_loss = [result_RF[0][3],result_RF[1][3]]
     print("----------------------------------")
     print("Ensemble of Logistic Regression, Naive Bayes (Multinomial) and Random Forest:")
     print("----------------------------------")
     generate_metrics(result_ensemble,'ensemble')
     result_ensemble_acc = [result_ensemble[0][2],result_ensemble[1][2]]
+    result_ensemble_loss = [result_ensemble[0][3],result_ensemble[1][3]]
     print("----------------------------------")
     result_acc = [result_logres_acc[0],result_logres_acc[1], \
     result_NBG_acc[0],result_NBG_acc[1], \
     result_NBM_acc[0],result_NBM_acc[1], \
     result_SVM_acc[0],result_SVM_acc[1], \
     result_RF_acc[0],result_RF_acc[1], \
-    result_ensemble_acc[0],result_ensemble_acc[1]]
-    plot_metrics(create_plot_data(result_acc,None))
+    result_ensemble_acc[0],result_ensemble_acc[1],result_GB_acc[0],result_GB_acc[1]]
+
+    result_loss = [result_logres_loss[0],result_logres_loss[1], \
+    result_NBG_loss[0],result_NBG_loss[1], \
+    result_NBM_loss[0],result_NBM_loss[1], \
+    result_SVM_loss[0],result_SVM_loss[1], \
+    result_RF_loss[0],result_RF_loss[1], \
+    result_ensemble_loss[0],result_ensemble_loss[1],result_GB_loss[0],result_GB_loss[1]]
+
+    result = [result_acc, result_loss]
+    plot_metrics(create_plot_data(result,None))
 #perform word embeddings inputs: dataframe input data and output data; output: embedded data such as X train and test and y train and test
 def word_embeddings(input_data, output_data):
     ANN = 'cnn1'
@@ -730,13 +769,14 @@ def word_embeddings(input_data, output_data):
     preds1 = np.round(np.argmax(preds1, axis=1)).astype(int)
 
 def plot_function(track):
+    plt.subplot(221)
     plt.plot(track.history['acc'])
     plt.title('model accuracy')
     plt.ylabel('accuracy')
     plt.xlabel('epoch')
     plt.legend(['train'], loc='upper left')
-    plt.show()
-
+    
+    plt.subplot(222)
     plt.plot(track.history['loss'])
     plt.title('model loss')
     plt.ylabel('loss')

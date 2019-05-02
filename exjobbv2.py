@@ -642,57 +642,97 @@ def result_from_predicitions(prediction_array):
     cm = metrics.confusion_matrix(y_true=prediction_array[0], y_pred=prediction_array[1])
     print(cm)
 def create_plot_data(prediction_array,method):
-    result_frame = pd.DataFrame(columns=["Method","Accuracy"])
+    result_frame1 = pd.DataFrame(columns=["Method","Accuracy"])
+    result_frame2 = pd.DataFrame(columns=["Method","Loss"])
     if method == 'NBGauss':
-        NBGresult_name = ["NBGres_onehot","NBGres_BoW","NBGres_tfidf"]
-        NBGresult_acc = prediction_array
+        NBGresult_name = ["NBGres_BoW","NBGres_tfidf"]
+        NBGresult_acc = prediction_array[0]
+        NBGresult_loss = prediction_array[1]
         for i in range(len(NBGresult_name)):
             NBGresult1= pd.DataFrame([[NBGresult_name[i],NBGresult_acc[i]]], columns=["Method","Accuracy"])
-            result_frame = result_frame.append(NBGresult1)
+            result_frame1 = result_frame1.append(NBGresult1)
+            NBGresult2= pd.DataFrame([[NBGresult_name[i],NBGresult_loss[i]]], columns=["Method","Loss"])
+            result_frame2 = result_frame2.append(NBGresult2)
+            result_frame = [result_frame1,result_frame2]
         return result_frame
     elif method == 'NBMulti':
-        NBMresult_name = ["NBMres_onehot","NBMres_BoW","NBMres_tfidf"]
-        NBMresult_acc = prediction_array
+        NBMresult_name = ["NBMres_BoW","NBMres_tfidf"]
+        NBMresult_acc = prediction_array[0]
+        NBMresult_loss = prediction_array[1]
         for i in range(len(NBMresult_name)):
             NBMresult1= pd.DataFrame([[NBMresult_name[i],NBMresult_acc[i]]], columns=["Method","Accuracy"])
-            result_frame = result_frame.append(NBMresult1)
+            result_frame1 = result_frame1.append(NBMresult1)
+            NBMresult2= pd.DataFrame([[NBMresult_name[i],NBMresult_loss[i]]], columns=["Method","Loss"])
+            result_frame2 = result_frame2.append(NBMresult2)
+            result_frame = [result_frame1,result_frame2]
         return result_frame
     elif method == 'SVM':
-        SVMresult_name = ["SVMres_onehot","SVMres_BoW","SVMres_tfidf"]
-        SVMresult_acc = [prediction_array[0],prediction_array[1],prediction_array[2]]
+        SVMresult_name = ["SVMres_BoW","SVMres_tfidf"]
+        SVMresult_acc = prediction_array[0]
+        SVMresult_loss = prediction_array[1]
         for i in range(len(SVMresult_name)):
             SVMresult1= pd.DataFrame([[SVMresult_name[i],SVMresult_acc[i]]], columns=["Method","Accuracy"])
-            result_frame = result_frame.append(SVMresult1)
+            result_frame1 = result_frame1.append(SVMresult1)
+            SVMresult2= pd.DataFrame([[SVMresult_name[i],SVMresult_loss[i]]], columns=["Method","Loss"])
+            result_frame2 = result_frame2.append(SVMresult2)
+            result_frame = [result_frame1,result_frame2]
+        return result_frame
+    elif method == 'gb':
+        GBresult_name = ["GBres_BoW","GBres_tfidf"]
+        GBresult_acc = prediction_array[0]
+        GBresult_loss = prediction_array[1]
+        for i in range(len(GBresult_name)):
+            GBresult1= pd.DataFrame([[GBresult_name[i],GBresult_acc[i]]], columns=["Method","Accuracy"])
+            result_frame1 = result_frame1.append(GBresult1)
+            GBresult2= pd.DataFrame([[GBresult_name[i],GBresult_loss[i]]], columns=["Method","Loss"])
+            result_frame2 = result_frame2.append(GBresult2)
+            result_frame = [result_frame1,result_frame2]
         return result_frame
     elif method == 'RF':
-        RFresult_name = ["RFres_onehot","RFres_BoW","RFres_tfidf"]
-        RFresult_acc = prediction_array
+        RFresult_name = ["RFres_BoW","RFres_tfidf"]
+        RFresult_acc = prediction_array[0]
+        RFresult_loss = prediction_array[1]
         for i in range(len(RFresult_name)):
             RFresult1= pd.DataFrame([[RFresult_name[i],RFresult_acc[i]]], columns=["Method","Accuracy"])
-            result_frame = result_frame.append(RFresult1)
+            result_frame1 = result_frame1.append(RFresult1)
+            RFresult2= pd.DataFrame([[RFresult_name[i],RFresult_loss[i]]], columns=["Method","Loss"])
+            result_frame2 = result_frame2.append(RFresult2)
+            result_frame = [result_frame1,result_frame2]
         return result_frame
     elif method == 'ensemble':
-        ensemble_result_name = ["ensemble_res_onehot","ensemble_res_BoW","ensemble_tfidf"]
-        ensemble_result_acc = prediction_array
+        ensemble_result_name = ["ensemble_res_BoW","ensemble_tfidf"]
+        ensemble_result_acc = prediction_array[0]
+        ensemble_result_loss = prediction_array[1]
         for i in range(len(ensemble_result_name)):
             ensemble_result1= pd.DataFrame([[ensemble_result_name[i],ensemble_result_acc[i]]], columns=["Method","Accuracy"])
-            result_frame = result_frame.append(ensemble_result1)
+            result_frame1 = result_frame1.append(ensemble_result1)
+            ensemble_result2= pd.DataFrame([[ensemble_result_name[i],ensemble_result_loss[i]]], columns=["Method","Loss"])
+            result_frame2 = result_frame2.append(ensemble_result2)
+            result_frame = [result_frame1,result_frame2]
         return result_frame
     elif method == 'log':
-        logresult_name = ["logres_onehot","logres_BoW","logres_tfidf"]
-        logresult_acc = prediction_array
+        logresult_name = ["logres_BoW","logres_tfidf"]
+        logresult_acc = prediction_array[0]
+        logresult_loss = prediction_array[1]
         for i in range(len(logresult_name)):
             logresult1= pd.DataFrame([[logresult_name[i],logresult_acc[i]]], columns=["Method","Accuracy"])
-            result_frame = result_frame.append(logresult1)
+            result_frame1 = result_frame1.append(logresult1)
+            logresult2= pd.DataFrame([[logresult_name[i],logresult_loss[i]]], columns=["Method","Loss"])
+            result_frame2 = result_frame2.append(logresult2)
+            result_frame = [result_frame1,result_frame2]
         return result_frame
     else:
-        result_name = ["lr_OHE","lr_BoW","lr_tfidf","NBG_OHE","NBG_BoW","NBG_tfidf",\
-            "NBM_OHE","NBM_BoW","NBM_tfidf", "SVM_OHE","SVM_BoW","SVM_tfidf",\
-            "RF_OHE","RF_BoW","RF_tfidf","ensemble_OHE","ensemble_BoW","ensemble_tfidf"]
-        result_acc = prediction_array
+        result_name = ["lr_BoW","lr_tfidf","NBG_BoW","NBG_tfidf",\
+            "NBM_BoW","NBM_tfidf","SVM_BoW","SVM_tfidf",\
+            "RF_BoW","RF_tfidf","ensemble_BoW","ensemble_tfidf","GBres_BoW","GBres_tfidf"]
+        result_acc = prediction_array[0]
+        result_loss = prediction_array[1]
         for i in range(len(result_name)):
             result1= pd.DataFrame([[result_name[i],result_acc[i]]], columns=["Method","Accuracy"])
-            result_frame = result_frame.append(result1)
+            result_frame1 = result_frame1.append(result1)
+            result2= pd.DataFrame([[result_name[i],result_loss[i]]], columns=["Method","Loss"])
+            result_frame2 = result_frame2.append(result2)
+            result_frame = [result_frame1,result_frame2]
         return result_frame
 #[6] plot data
 #plt.cm.RdYlBu

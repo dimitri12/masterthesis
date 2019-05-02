@@ -4,7 +4,7 @@ sys.path.append("/Users/dimitrigharam/Desktop/exjobb")
 import exjobbv2 as run
 import nltk
 from nltk.corpus import stopwords 
-import numpy as np
+import numpy as npa
 from sklearn.pipeline import Pipeline
 from sklearn import metrics
 '''
@@ -40,7 +40,7 @@ print("Test Code")
 
 
 
-Part 1: Text Classification with OHE, BoW and TF-IDF
+Part 1: Text Classification with BoW and TF-IDF
 
 
 
@@ -51,22 +51,18 @@ result_frame = pd.DataFrame(columns=["Method","Accuracy"])
 df = pd.read_csv("testdata_exjobb.csv", encoding='ISO-8859-1')
 #input_data
 #print(df.FreeText.head())
+'''
+Perform an Explanatory data analysis
+'''
+print("EDA")
+run.eda(df)
 input_data = df.FreeText
 #print(df.FreeText.iloc[0])
 #output_data
 output_data = df.pout
 outputdata2 = run.transform_output_data(output_data,"int")
 #print(df.pout)
-'''
 
-
-
-Part 1: Text Classification with OHE, BoW and TF-IDF
-
-
-
-
-'''
 '''
 print("##################################")
 print("Preprocessing:")
@@ -89,145 +85,22 @@ print("Embedding/Encoding/Processing starting")
 print("----------------------------------")
 #the result from these encodings are arrays containing training and test data for both the input and output
 #in order: input_train, input_test, output_train, output_test
-#one_hot2 = run.text_processing(input_data,output_data, "onehot",1,'int')
 bag_of_words2 = run.text_processing(input_data,outputdata2, None, 1)
 tf_idf2 = run.text_processing(input_data,outputdata2, "tfidf", 1)
 data_array = [bag_of_words2,tf_idf2]
 print(tf_idf2)
+
 print("Embedding/Encoding/Processing is finished")
-
+'''
 print("##################################")
-print("Modeling:")
+print("Modeling and prediction:")
 print("----------------------------------")
-result_logregr = run.predictor(data_array,None)
-result_NBG = run.predictor(data_array,'NBGauss')
-result_NBM = run.predictor(data_array,'NBMulti')
-result_SVM = run.predictor(data_array,'SVM')
-result_RF = run.predictor(data_array,'RF')
-result_ensemble = run.predictor(data_array,'ensemble')
- 
+
+#run.clf_predictor(data_array)
 #CHALLENGE: COLLECT ALL ACC RESULTS TO GENERATE ONE GRAPH
-print("Modelling finished")
+
+print("Modeling and prediction finished")
 print("##################################")
-print("Evaluation of predictions:")
-print("----------------------------------")
-print("Logistic Regression:")
-print("----------------------------------")
-#prints the metrics
-run.generate_metrics(result_logregr)
-#plots the graph for accuracies over different encoding metods for one particular classification method
-result_logres_acc = [result_logregr[0][2],result_logregr[1][2],result_logregr[2][2]]
-plot_input1 = [result_logres_acc[0],result_logres_acc[1],result_logres_acc[2]]
-print("----------------------------------")
-print("Naive Bayes (Gaussian):")
-run.generate_metrics(result_NBG)
-result_NBG_acc = [result_NBG[0][2],result_NBG[1][2],result_NBG[2][2]]
-plot_input2 = [result_NBG_acc[0],result_NBG_acc[1],result_NBG_acc[2]]
-print("----------------------------------")
-print("Naive Bayes (Multinomial):")
-print("----------------------------------")
-run.generate_metrics(result_NBM)
-result_NBM_acc = [result_NBM[0][2],result_NBM[1][2],result_NBM[2][2]]
-plot_input3 = [result_NBM_acc[0],result_NBM_acc[1],result_NBM_acc[2]]
-print("----------------------------------")
-print("Support Vector Machine:")
-print("----------------------------------")
-run.generate_metrics(result_SVM)
-result_SVM_acc = [result_SVM[0][2],result_SVM[1][2],result_SVM[2][2]]
-plot_input4 = [result_SVM_acc[0],result_SVM_acc[1],result_SVM_acc[2]]
-print("----------------------------------")
-print("Random Forest:")
-print("----------------------------------")
-run.generate_metrics(result_RF)
-result_RF_acc = [result_RF[0][2],result_RF[1][2],result_RF[2][2]]
-plot_input5 = [result_RF_acc[0],result_RF_acc[1],result_RF_acc[2]]
-print("----------------------------------")
-print("Ensemble of Logistic Regression, Naive Bayes (Multinomial) and Random Forest:")
-print("----------------------------------")
-run.generate_metrics(result_ensemble)
-result_ensemble_acc = [result_ensemble[0][2],result_ensemble[1][2],result_ensemble[2][2]]
-plot_input6 = [result_ensemble_acc[0],result_ensemble_acc[1],result_ensemble_acc[2]]
-print("----------------------------------")
-result_acc = [result_logres_acc[0],result_logres_acc[1],result_logres_acc[2], \
-result_NBG_acc[0],result_NBG_acc[1],result_NBG_acc[2], \
-result_NBM_acc[0],result_NBM_acc[1],result_NBM_acc[2], \
-result_SVM_acc[0],result_SVM_acc[1],result_SVM_acc[2], \
-result_RF_acc[0],result_RF_acc[1],result_RF_acc[2], \
-result_ensemble_acc[0],result_ensemble_acc[1],result_ensemble_acc[2]]
-run.plot_metrics(run.create_plot_data(result_acc,None))
-#plot auc roc curve
-'''
-
-
-
-'''
-########################################
-## index word vectors
-########################################
-print('Indexing word vectors')
-
-word2vec = KeyedVectors.load_word2vec_format(EMBEDDING_FILE, \
-        binary=True)
-print('Found %s word vectors of word2vec' % len(word2vec.vocab))
-#########################################
-nltk.download('stopwords')
-
-#preprocessing using tokenization and lower casing
-
-#dummies is a mashup of multiple df columns
-dummies = df.iloc[:,1:2]
-#which 1 of these extractions is efficient?
-FreeText1 = df['FreeText']
-FreeText2 = df.FreeText
-
-Pout1 = df['Pout']
-Pout2 = df.Pout
-
-FreeText3 = np.array(df['FreeText'])
-Pout3 = np.array(df['pout'])
-
-#from [1]
-norm_docs = np.vectorize(pre_processing2)
-normalized_documents = norm_docs(dummies)
-
-#fasttext
-m = fastText.load_model("cc.sv.300.bin") 
-v = m.get_word_vector('hello')
-model = FastText.load_fasttext_format('cc.sv.300.bin')
-
-
-#modify this mothafucka
-word_to_vec_map, word_to_index, index_to_words, vocab_size, dim= load_vectors('../input/fasttext-wikinews/wiki-news-300d-1M.vec')
-
-
-#these has to correspond to the dataframe input and output and X_test for the test data
-X = np.array(train.Phrase)
-Y = np.array(train.Sentiment)
-X_test = np.array(test.Phrase)
-print("X.shape", X.shape) 
-print("Y.shape", Y.shape)
-
-
-#to test the CNN from [8]
-model = cnn((maxLen,), word_to_vec_map, word_to_index)
-model.compile(optimizer = "adam", loss = "categorical_crossentropy", metrics = ["accuracy"])
-model.summary()
-track = model.fit(X_vec, Y, batch_size=128, epochs=9)
-#plot acc
-plt.plot(track.history['acc'])
-plt.title('model accuracy')
-plt.ylabel('accuracy')
-plt.xlabel('epoch')
-plt.legend(['train'], loc='upper left')
-plt.show()
-#plot loss
-plt.plot(track.history['loss'])
-plt.title('model loss')
-plt.ylabel('loss')
-plt.xlabel('epoch')
-plt.legend(['train'], loc='upper left')
-plt.show()
-'''
 '''
 
 
@@ -240,8 +113,10 @@ Part 2: Word Embeddings using Word2Vec,Fasttext and ANNs with LSTM, GRU and CNN
 '''
 labels = list(df)
 labels.remove('FreeText')
+output_data = df.pout
 #output_data = df[labels].values
-outputdata = run.transform_output_data(output_data,'int')
+#print(output_data)
+#outputdata = run.transform_output_data(output_data,'int')
 
 '''
 X = np.array(input_data)
@@ -251,17 +126,6 @@ print('-'*40)
 print(Y.shape)
 '''
 #print(outputdata)
-test = run.word_embeddings(input_data, output_data)
-print('-'*50)
-print(test[0])
-print('-'*50)
-print(test[1])
-print('-'*50)
-print(test[2])
-print('-'*50)
-print(test[3])
-print('-'*50)
-print(test[4])
-print('-'*50)
+#test = run.word_embeddings(input_data, output_data)
 print("##################################")
 print("Done")

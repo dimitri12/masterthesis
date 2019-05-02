@@ -36,6 +36,72 @@ Machine learning models (for the embeddings):
 print("##################################")
 print("Test Code")
 '''
+result_frame = pd.DataFrame(columns=["Method","Accuracy"])
+df = pd.read_csv("testdata_exjobb.csv", encoding='ISO-8859-1')
+labels = list(df)
+labels.remove('FreeText')
+labels.remove('caseid')
+labels.remove('pout')
+labels.remove('Gender')
+labels.remove('LastContactN')
+labels.remove('hosp_ed')
+labels.remove('hosp_admit')
+labels.remove('prio')
+labels.remove('operator')
+labels.remove('hosp_icu')
+labels.remove('LastContactDays')
+labels.remove('Age')
+
+#The labels list contains all the data from columns that has hexadecimal values
+#The solution is to perform individual predictions but generate precision as metric
+
+'''
+42 indexes
+labels by index:
+0: caseid
+1: FreeText
+0 can be excluded
+1 is input
+2-41 is outputs
+index 7 (pout), index 8 (prio) and index 6 (operator) is considered multiclass
+index 2 (Age) and index 5 (LastContactDays) are considered numerical and needs
+to be categorised
+After categorisation index 2 and 5 will be assigned to index 42 and 43 
+as AgeCat and LcdCat
+
+the rest of the outputs are binary outputs
+
+The Labels who doesn't have a name (Hexvalues) is 99% of the data zeros and there is only a
+single 1
+
+
+
+'''
+
+
+
+'''
+Categorise index 2 and 5
+'''
+#df = run.transformAge(df)
+#df = run.transformLCD(df)
+#print(df)
+#it works
+'''
+Perform an Explorative data analysis
+'''
+
+#run.eda(df)
+
+#load output data and define if it is multiclass or not
+#input_data = df.FreeText
+#pout,prio,operator,agecat,lcdcat
+#output_MC=run.doMultiClass(df)
+#get multiclass variable
+#multiclass_yes = output_MC[5]
+#or
+#output_bin1 = run.doBinary1()
+#multiclass_no = output_bin1[5]
 '''
 
 
@@ -46,23 +112,6 @@ Part 1: Text Classification with BoW and TF-IDF
 
 
 '''
-
-result_frame = pd.DataFrame(columns=["Method","Accuracy"])
-df = pd.read_csv("testdata_exjobb.csv", encoding='ISO-8859-1')
-#input_data
-#print(df.FreeText.head())
-'''
-Perform an Explorative data analysis
-'''
-
-#run.eda(df)
-input_data = df.FreeText
-#print(df.FreeText.iloc[0])
-#output_data
-output_data = df.pout
-outputdata2 = run.transform_output_data(output_data,"int")
-#print(df.pout)
-
 '''
 print("##################################")
 print("Preprocessing:")
@@ -96,8 +145,15 @@ print("##################################")
 print("Modeling and prediction:")
 print("----------------------------------")
 
-#run.clf_predictor(data_array)
-#CHALLENGE: COLLECT ALL ACC RESULTS TO GENERATE ONE GRAPH
+#result = run.doMultiClasspart2(input_data,df)
+#run.plot_metrics(create_plot_data(result[0],None))
+#run.plot_roc(result[1][0],result[1][1])
+#result1 = run.doBinary2(input_data,df,labels)
+#run.plot_metrics(create_plot_data(result1[0],None))
+#run.plot_roc(result1[1][0],result1[1][1])
+#result2 = run.doBinary1part2(input_data,df)
+#run.plot_metrics(create_plot_data(result2[0],None))
+#run.plot_roc(result2[1][0],result1[2][1])
 
 print("Modeling and prediction finished")
 print("##################################")
@@ -111,20 +167,9 @@ Part 2: Word Embeddings using Word2Vec,Fasttext and ANNs with LSTM, GRU and CNN
 
 
 '''
-labels = list(df)
-labels.remove('FreeText')
-output_data = df.pout
-#output_data = df[labels].values
-#print(output_data)
+
 #outputdata = run.transform_output_data(output_data,'int')
 
-'''
-X = np.array(input_data)
-Y = np.array(output_data)
-print(X.shape)
-print('-'*40)
-print(Y.shape)
-'''
 #print(outputdata)
 #test = run.word_embeddings(input_data, output_data)
 print("##################################")

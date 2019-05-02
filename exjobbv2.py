@@ -66,6 +66,7 @@ import seaborn as sns
 from operator import is_not
 from functools import partial
 from gensim.models.wrappers import FastText
+import matplotlib.patches as patches
 import time
 import datetime
 import warnings
@@ -84,15 +85,125 @@ MAX_SEQUENCE_LENGTH = 30
 MAX_NB_WORDS = 20000
 EMBEDDING_DIM = 100
 VALIDATION_SPLIT = 0.1
+#activation function
 act = 'relu'
 re_weight = True
+#dimension for fasttext
 DIM = 300
+#dimension for word2vec
 embed_dim = 128
 lstm_out = 196
 filter_sizes = [3,4,5]
 num_filters = 100
 drop = 0.5
 
+def doBinary1(df):
+    gender = df.Gender
+    LCN = df.LastContactN
+    hosp_ed = df.hosp_ed
+    hosp_admit = df.hosp_admit
+    hosp_icu = df.hosp_icu
+    multiclass = 'no'
+    array = [gender,LCN,hosp_ed,hosp_admit,hosp_icu,multiclass]
+    return array
+
+def doBinary1part2(input_data,df):
+    array = doBinary1(df)
+    acc = []
+    loss = []
+    multiclass = array[5]
+    array.pop(5)
+    for x in range(len(array)):
+        output_data = df[array[x]]
+        bag_of_words2 = text_processing(input_data,output_data, None, 1)
+        tf_idf2 = text_processing(input_data,output_data, "tfidf", 1)
+        data_array = [bag_of_words2,tf_idf2]
+        result = clf_predictor(data_array,multiclass)
+        acc.append(result[0])
+        loss.append(result[1])
+    result = [acc,loss]
+    return result
+
+def doMultiClasspart2(input_data,df):
+    array = doMultiClass(df)
+    acc = []
+    loss = []
+    multiclass = array[5]
+    array.pop(5)
+    for x in range(len(array)):
+        output_data = df[array[x]]
+        bag_of_words2 = text_processing(input_data,output_data, None, 1)
+        tf_idf2 = text_processing(input_data,output_data, "tfidf", 1)
+        data_array = [bag_of_words2,tf_idf2]
+        result = clf_predictor(data_array,multiclass)
+        acc.append(result[0])
+        loss.append(result[1])
+    result = [acc,loss]
+    return result
+
+def doMultiClass(df):
+    pout= df.pout
+    prio = df.prio
+    operator = df.operator
+    agecat = df.AgeCat
+    lcdcat = df.LcdCat
+    multiclass = 'yes'
+    array = [pout,prio,operator,agecat,lcdcat,multiclass]
+    return array
+
+#this function will predict all the hexadecimal labeled values
+def doBinary2(input_data,df,labels):
+    acc = []
+    loss = []
+    multiclass = 'no'
+    for x in range(len(labels)):
+        output_data = df[labels[x]]
+        bag_of_words2 = text_processing(input_data,output_data, None, 1)
+        tf_idf2 = text_processing(input_data,output_data, "tfidf", 1)
+        data_array = [bag_of_words2,tf_idf2]
+        result = clf_predictor(data_array,multiclass)
+        acc.append(result[0])
+        loss.append(result[1])
+    result = [acc,loss]
+    return result
+def transformAge(df):
+    '''
+    This function will categorise the age data into 5 different age categories
+    '''
+    dfage = df.Age
+
+    array = []
+    for i in range(len(dfage)):
+        if dfage[i] < 7:
+            array.append(0)
+        elif dfage[i] >= 7 and dfage[i] < 19:
+            array.append(1)
+        elif dfage[i] >= 19 and dfage[i] < 35:
+            array.append(2)
+        elif dfage[i] >= 35 and dfage[i] < 55:
+            array.append(3)
+        elif dfage[i] >= 55 and dfage[i] < 65:
+            array.append(4)
+        else:
+            array.append(5)
+    df["AgeCat"] = array
+    return df
+
+def transformLCD(df):
+    '''
+    This function will transform the numerical LCD data into 3 categories
+    '''
+    dflcd = df.LastContactDays
+    array = []
+    for i in range(len(dflcd)):
+        if dflcd[i] < 2:
+            array.append(0)
+        elif dflcd[i] >= 2 and dflcd[i] < 31:
+            array.append(1)
+        else:
+            array.append(2)
+    df["LcdCat"] = array
+    return df
 
 def test_code(input):
     print("Hello " + input)
@@ -112,7 +223,6 @@ def eda(df):
 
     plt.rcParams.update(params)
     
-    #plot age and gender
     plt.subplot(441)
     x1=df['prio']
     ylabel = "Count"
@@ -154,7 +264,7 @@ def eda(df):
     plt.xticks(rotation=90)
 
     plt.subplot(449)
-    x4=df['Age']
+    x4=df['AgeCat']
     ylabel = "Count"
     sns.countplot(x4)
     plt.title('Age')
@@ -181,7 +291,7 @@ def eda(df):
     plt.xticks(rotation=90)
 
     plt.subplot(4,4,12)
-    x4=df['LastContactDays']
+    x4=df['LcdCat']
     ylabel = "Count"
     sns.countplot(x4)
     plt.title('LastContactDays')
@@ -407,35 +517,36 @@ def feature_engineering(input_data, output_data):
     assert X_test.shape[0] == y_test.shape[0]
     result = [X_train, X_test, y_train, y_test]
     return result
-def predictor(data_array,method):
+def predictor(data_array,method,multiclass):
     if method == 'NBGauss':
-        NBGres_BoW = initiate_predictions(data_array[0],method)
-        NBGres_tfidf = initiate_predictions(data_array[1],method)
+        NBGres_BoW = initiate_predictions(data_array[0],method,multiclass)
+        NBGres_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [NBGres_BoW,NBGres_tfidf]
     elif method == 'NBMulti':
-        NBMres_BoW = initiate_predictions(data_array[0],method)
-        NBMres_tfidf = initiate_predictions(data_array[1],method)
+        NBMres_BoW = initiate_predictions(data_array[0],method,multiclass)
+        NBMres_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [NBMres_BoW,NBMres_tfidf]
     elif method == 'SVM':
-        SVMres_BoW = initiate_predictions(data_array[0],method)
-        SVMres_tfidf = initiate_predictions(data_array[1],method)
+        SVMres_BoW = initiate_predictions(data_array[0],method,multiclass)
+        SVMres_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [SVMres_BoW,SVMres_tfidf]
     elif method == 'RF':
-        RFres_BoW = initiate_predictions(data_array[0],method)
-        RFres_tfidf = initiate_predictions(data_array[1],method)
+        RFres_BoW = initiate_predictions(data_array[0],method,multiclass)
+        RFres_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [RFres_BoW,RFres_tfidf]
     elif method == 'ensemble':
-        res_BoW = initiate_predictions(data_array[0],method)
-        res_tfidf = initiate_predictions(data_array[1],method)
+        res_BoW = initiate_predictions(data_array[0],method,multiclass)
+        res_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [res_BoW,res_tfidf]
     elif method == 'gb':
-        GBres_BoW = initiate_predictions(data_array[0],method)
-        GBres_tfidf = initiate_predictions(data_array[1],method)
+        GBres_BoW = initiate_predictions(data_array[0],method,multiclass)
+        GBres_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [GBres_BoW,GBres_tfidf]
     else:
-        logres_BoW = initiate_predictions(data_array[0],method)
-        logres_tfidf = initiate_predictions(data_array[1],method)
+        logres_BoW = initiate_predictions(data_array[0],method,multiclass)
+        logres_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [logres_BoW,logres_tfidf]
+        #pred_prob is at index 4
     return result
 #[6] prediction using the processed data
 def generate_metrics(result,clf=None):
@@ -463,7 +574,7 @@ def generate_metrics(result,clf=None):
     print('-'*30)
     print("plot graph")
     print('-'*30)
-def train_predict_model(classifier,X_train,X_test, y_train, y_test):
+def train_predict_model(classifier,X_train,X_test, y_train, y_test,multiclass):
     # build model
     assert X_train.shape[0] == y_train.shape[0]
     assert X_test.shape[0] == y_test.shape[0]
@@ -483,28 +594,32 @@ def train_predict_model(classifier,X_train,X_test, y_train, y_test):
     elif classifier == 'gb':
         model = XGBClassifier(n_estimators=100)
     else:
-        model = LogisticRegression()
+        if multiclass == 'yes':
+            model = LogisticRegression(multi_class = 'multinomial', solver = 'lbfgs')
+        else:
+            model = LogisticRegression()
     model.fit(X_train, y_train)
     # predict using model
     predicted = model.predict(X_test)
-    
+    pred_prob = model.predict_proba(X_test)[:,1]
     acc = metrics.accuracy_score(y_test,predicted)
     acc = acc*100
     loss = log_loss(y_test,predicted)
     plot_roc(predicted, y_test)
-    result = [predicted,acc,loss]
+    result = [predicted,acc,loss,pred_prob]
     return result    
-def initiate_predictions(train_test_data,method):
+def initiate_predictions(train_test_data,method,multiclass):
     X_train = train_test_data[0]
     X_test = train_test_data[1]
     y_train = train_test_data[2]
     y_test = train_test_data[3]
-    prediction = train_predict_model(method,X_train,X_test,y_train,y_test)
+    prediction = train_predict_model(method,X_train,X_test,y_train,y_test,multiclass)
     predicted = prediction[0]
     acc = prediction[1]
     true = y_test
     loss = prediction[2]
-    result = [true,predicted,acc,loss]
+    pred_prob = prediction[3]
+    result = [true,predicted,acc,loss,pred_prob]
     return result
 def result_from_predicitions(prediction_array):
     '''
@@ -582,35 +697,75 @@ def create_plot_data(prediction_array,method):
 #[6] plot data
 #plt.cm.RdYlBu
 def plot_metrics(result_frame):
-    plt.subplot(221)
+    figsize=(20, 10)
+    ticksize = 14
+    titlesize = ticksize + 8
+    labelsize = ticksize + 5
+    
+    params = {'figure.figsize' : figsize,
+            'axes.labelsize' : labelsize,
+            'axes.titlesize' : titlesize,
+            'xtick.labelsize': ticksize,
+            'ytick.labelsize': ticksize}
+
+    plt.rcParams.update(params)
+    plt.subplot(211)
     sns.set_color_codes("muted")
     sns.barplot(x='Method', y='Accuracy', data=result_frame[0], color="r")
     plt.xlabel('Accuracy Method')
     plt.title('Classifier Accuracy Percent')
 
-    plt.subplot(222)
+    plt.subplot(212)
     sns.set_color_codes("muted")
     sns.barplot(x='Method', y='loss', data=result_frame[1], color="b")
     plt.xlabel('Loss Method')
     plt.title('Classifier Loss Percent')
     plt.show()
 
-#AUCROC index 2
-def plot_roc(y_pred, y_test):
-    fpr, tpr, _ = roc_curve(y_test, y_pred)
+#AUCROC not complete
+def plot_roc(pred_data, test_data):
+    #courtesy of DATAI https://www.kaggle.com/kanncaa1/roc-curve-with-k-fold-cv
+    # plot arrows, why? to present accuracy
+    fig1 = plt.figure(figsize=[12,12])
+    ax1 = fig1.add_subplot(111,aspect = 'equal')
+    ax1.add_patch(
+        patches.Arrow(0.45,0.5,-0.25,0.25,width=0.3,color='green',alpha = 0.5)
+        )
+    ax1.add_patch(
+        patches.Arrow(0.5,0.45,0.25,-0.25,width=0.3,color='red',alpha = 0.5)
+        )
+    tprs = []
+    aucs = []
+    mean_fpr = np.linspace(0,1,100)
+    for i in range(len(pred_data)):
+        fpr, tpr, _ = roc_curve(test_data[i], pred_data[i])
+        tprs.append(interp(mean_fpr, fpr, tpr))
+        roc_auc = auc(fpr, tpr)
+        aucs.append(roc_auc)
+        plt.plot(fpr, tpr, lw=2, alpha=0.3, label='ROC fold %d (AUC = %0.2f)' % (i, roc_auc))
+    
+    plt.plot([0,1],[0,1],linestyle = '--',lw = 2,color = 'black')
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_auc = auc(mean_fpr, mean_tpr)
+    plt.plot(mean_fpr, mean_tpr, color='blue',
+            label=r'Mean ROC (AUC = %0.2f )' % (mean_auc),lw=2, alpha=1)
+    
     plt.xlabel('FPR')
     plt.ylabel('TPR')
-    plt.plot(fpr, tpr)
+    plt.title('ROC')
+    plt.legend(loc="lower right")
+    plt.text(0.32,0.7,'More accurate area',fontsize = 12)
+    plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
     plt.show()
 #perform predictions on classification methods
-def clf_predictor(data_array):
-    result_logregr = predictor(data_array,None)
-    result_NBG = predictor(data_array,'NBGauss')
-    result_NBM = predictor(data_array,'NBMulti')
-    result_SVM = predictor(data_array,'SVM')
-    result_RF = predictor(data_array,'RF')
-    result_ensemble = predictor(data_array,'ensemble')
-    result_GB = predictor(data_array,'gb')
+def clf_predictor(input_data,multiclass):
+    result_logregr = predictor(input_data,None,multiclass)
+    result_NBG = predictor(input_data,'NBGauss',multiclass)
+    result_NBM = predictor(input_data,'NBMulti',multiclass)
+    result_SVM = predictor(input_data,'SVM',multiclass)
+    result_RF = predictor(input_data,'RF',multiclass)
+    result_ensemble = predictor(input_data,'ensemble',multiclass)
+    result_GB = predictor(input_data,'gb',multiclass)
     print("Evaluation of predictions:")
     print("----------------------------------")
     generate_metrics(result_logregr)
@@ -669,8 +824,19 @@ def clf_predictor(data_array):
     result_RF_loss[0],result_RF_loss[1], \
     result_ensemble_loss[0],result_ensemble_loss[1],result_GB_loss[0],result_GB_loss[1]]
 
-    result = [result_acc, result_loss]
-    plot_metrics(create_plot_data(result,None))
+    proba_data = [result_logregr[0][4],result_logregr[1][4],result_NBG[0][4],result_NBG[1][4],\
+        result_NBM[0][4],result_NBM[1][4],result_SVM[0][4],result_SVM[1][4],\
+        result_GB[0][4],result_GB[1][4],result_RF[0][4],result_RF[1][4],\
+        result_ensemble[0][4],result_ensemble[1][4]]
+    test_data = [result_logregr[0][1],result_logregr[1][1],result_NBG[0][1],result_NBG[1][1],\
+        result_NBM[0][1],result_NBM[1][1],result_SVM[0][1],result_SVM[1][1],\
+        result_GB[0][1],result_GB[1][1],result_RF[0][1],result_RF[1][1],\
+        result_ensemble[0][1],result_ensemble[1][1]]
+  
+    result1 = [result_acc, result_loss]
+    result2 = [proba_data,test_data]
+    result=[result1,result2]
+    return result
 #perform word embeddings inputs: dataframe input data and output data; output: embedded data such as X train and test and y train and test
 def word_embeddings(input_data, output_data):
     ANN = 'cnn1'

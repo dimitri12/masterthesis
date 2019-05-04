@@ -97,6 +97,22 @@ filter_sizes = [3,4,5]
 num_filters = 100
 drop = 0.5
 
+def create_labels_list(df):
+    labels = list(df)
+    labels.remove('FreeText')
+    labels.remove('caseid')
+    labels.remove('pout')
+    labels.remove('Gender')
+    labels.remove('LastContactN')
+    labels.remove('hosp_ed')
+    labels.remove('hosp_admit')
+    labels.remove('prio')
+    labels.remove('operator')
+    labels.remove('hosp_icu')
+    labels.remove('LastContactDays')
+    labels.remove('Age')
+    return labels
+
 def doBinary1(df):
     gender = df.Gender
     LCN = df.LastContactN
@@ -125,6 +141,7 @@ def doBinary1part2(input_data,df):
     return result
 
 def doMultiClasspart2(input_data,df):
+    #output data
     array = doMultiClass(df)
     acc = []
     loss = []
@@ -166,6 +183,69 @@ def doBinary2(input_data,df,labels):
         loss.append(result[1])
     result = [acc,loss]
     return result
+'''
+ANNs:
+1.CNN1
+2.CNN2
+3.LSTM
+4.GRU
+5.GRU2
+6. Default (write None)
+
+embedding layers:
+0: Word2Vec
+1: fasttext (self made)
+2: fasttext downloaded from fasttext web page
+'''
+def doBinary1part3(input_data,df):
+    #embedding layer index 'el' in short
+    el = 0
+    ANN = 'cnn1'
+    array = doBinary1(df)
+    #removing the multiclass variable
+    array.pop(5)
+    #5 binary data
+    output_data = df[array[4]]
+    dense = 2
+    embedded = word_embeddings(input_data, output_data ,ANN,dense,el)
+    ANN2 = 'cnn2'
+    embedded1 = word_embeddings(input_data, output_data ,ANN2,dense,el)
+    result = we_evaluation(embedded[0],embedded1[0],embedded[1],embedded[2])
+    print("Result from 1st prediction: "+ result[0]+"")
+    print("Result from 2nd prediction: "+ result[1]+"")
+
+def doBinary2part2(input_data,df,labels):
+    #embedding layer index 'el' in short
+    el = 0
+    ANN = 'cnn1'
+    #label length is 30
+    output_data = df[labels[29]]
+    dense=2
+    embedded = word_embeddings(input_data, output_data ,ANN,dense,el)
+    ANN2 = 'cnn2'
+    embedded1 = word_embeddings(input_data, output_data ,ANN2,dense,el)
+    result = we_evaluation(embedded[0],embedded1[0],embedded[1],embedded[2])
+    print("Result from 1st prediction: "+ result[0]+"")
+    print("Result from 2nd prediction: "+ result[1]+"")
+
+def doMultiClasspart3(input_data,df):
+    #embedding layer index 'el' in short
+    el = 0
+    ANN = 'cnn1'
+    array = doMultiClass(df)
+    array.pop(5)
+    #array length is 5
+    #the indexes in array and dense must match otherwise we will get errors
+    output_data = df[array[4]]
+    dense =[5,5,6,5,3]
+    embedded = word_embeddings(input_data, output_data ,ANN,dense[4],el)
+    ANN2 = 'cnn2'
+    embedded1 = word_embeddings(input_data, output_data ,ANN2,dense[4],el)
+    result = we_evaluation(embedded[0],embedded1[0],embedded[1],embedded[2])
+    print("Result from 1st prediction: "+ result[0]+"")
+    print("Result from 2nd prediction: "+ result[1]+"")
+
+
 def transformAge(df):
     '''
     This function will categorise the age data into 5 different age categories
@@ -815,17 +895,19 @@ def clf_predictor(input_data,multiclass):
     result_logres_acc = [result_logregr[0][2],result_logregr[1][2]]
     result_logres_loss = [result_logregr[0][3],result_logregr[1][3]]
     print("----------------------------------")
-    print("Naive Bayes (Gaussian):")
-    generate_metrics(result_NBG,'NBG')
-    result_NBG_acc = [result_NBG[0][2],result_NBG[1][2]]
-    result_NBG_loss = [result_NBG[0][3],result_NBG[1][3]]
-    print("----------------------------------")
-    print("Naive Bayes (Multinomial):")
-    print("----------------------------------")
-    generate_metrics(result_NBM,'NBM')
-    result_NBM_acc = [result_NBM[0][2],result_NBM[1][2]]
-    result_NBM_loss = [result_NBM[0][3],result_NBM[1][3]]
-    print("----------------------------------")
+    if multiclass == 'no':
+        print("Naive Bayes (Gaussian):")
+        generate_metrics(result_NBG,'NBG')
+        result_NBG_acc = [result_NBG[0][2],result_NBG[1][2]]
+        result_NBG_loss = [result_NBG[0][3],result_NBG[1][3]]
+        print("----------------------------------")
+    elif multiclass == 'yes':
+        print("Naive Bayes (Multinomial):")
+        print("----------------------------------")
+        generate_metrics(result_NBM,'NBM')
+        result_NBM_acc = [result_NBM[0][2],result_NBM[1][2]]
+        result_NBM_loss = [result_NBM[0][3],result_NBM[1][3]]
+        print("----------------------------------")
     print("Support Vector Machine:")
     print("----------------------------------")
     generate_metrics(result_SVM,'SVM')
@@ -878,8 +960,8 @@ def clf_predictor(input_data,multiclass):
     result=[result1,result2]
     return result
 #perform word embeddings inputs: dataframe input data and output data; output: embedded data such as X train and test and y train and test
-def word_embeddings(input_data, output_data):
-    ANN = 'cnn1'
+def word_embeddings(input_data, output_data,ANN,dense,el):
+    
     '''
     #create validation data
     val_data = input_data.sample(frac=0.2,random_state=1)
@@ -913,54 +995,45 @@ def word_embeddings(input_data, output_data):
     #fasttext (word_to_vec_map, word_to_index, index_to_words, vocab_size, dim)
     #tip: try to swap the sv.vec file with cc.sv.300.vec
     #load fasttext data into cnn1
-    array = load_vectors2('./data/fasttext/sv.vec')
-    embedding_layer1 = pretrained_embedding_layer(array[0], array[1])
-    array1 = load_vectors2('./cc.sv.300.vec')
-    embedding_layer2 = pretrained_embedding_layer(array1[0],array1[1])
+    corpus = load_vectors2('./data/fasttext/sv.vec')
+    embedding_layer1 = pretrained_embedding_layer(corpus[0], corpus[1])
+    corpus1 = load_vectors2('./cc.sv.300.vec')
+    embedding_layer2 = pretrained_embedding_layer(corpus1[0],corpus1[1])
     embedding_layer0=load_vectors_word2vec('./data/word2vec/sv.bin',data_in1[2])
-    
     embedding_layer = [embedding_layer0,embedding_layer1,embedding_layer2]
     #change data_in2[0].shape[1] with (MAX_LEN,)
     start_time = time.time()
     print(date_time(1))
-    model = predict_model(MAX_LEN,embedding_layer[0],ANN,data_in2[0],data[2],data2[0],data2[2])
+    model = predict_model(MAX_LEN,embedding_layer[el],ANN,data_in2[0],data[2],data2[0],data2[2],dense)
     elapsed_time = time.time() - start_time
     elapsed_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
     print("\nElapsed Time: " + elapsed_time)
     print("Completed Model Trainning", date_time(1))
-    plot_performance(model)
-    print('-'*60)
-    ANN = 'cnn2'
-    start_time = time.time()
-    print(date_time(1))
-    model1 = predict_model(MAX_LEN,embedding_layer[1],ANN,data_in2[0],data[2],data2[0],data2[2])
-    elapsed_time = time.time() - start_time
-    elapsed_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
-    print("\nElapsed Time: " + elapsed_time)
-    print("Completed Model Trainning", date_time(1))
-    plot_performance(model)
     #data_in2[0] = X_train
     #data[2] = y_train
-    preds = model.predict(data_in2[1])
-    preds1 = model1.predict(data_in2[1])
+    return [model, data_in2, data]
+def we_evaluation(model,model1,data1,data2):
+    plot_performance(model)
+    plot_performance(model1)
+    preds = model.predict(data1[1])
+    preds1 = model1.predict(data1[1])
     #or
     #preds2 = model.predict_classes(data_in2[1])
-
     '''
     Call the metrics function
     '''
-    prediction_array1 = [data[3],preds]
-    prediction_array2 = [data[3],preds1]
+    prediction_array1 = [data2[3],preds]
+    prediction_array2 = [data2[3],preds1]
     result_from_predicitions(prediction_array1)
     print('-'*60)
     result_from_predicitions(prediction_array2)
     test1 = 'CNN1'
     test2 = 'CNN2'
 
-    accuracy1 = model.evaluate(data_in2[1], data[3], verbose=1)
+    accuracy1 = model.evaluate(data1[1], data2[3], verbose=1)
     print("Model Performance of model 1: "+ test1 +" (Test Accuracy):")
     print('Accuracy: {:0.2f}%\nLoss: {:0.3f}\n'.format(accuracy1[1]*100, accuracy1[0]))
-    accuracy2 = model1.evaluate(data_in2[1], data[3], verbose=1)
+    accuracy2 = model1.evaluate(data1[1], data2[3], verbose=1)
     print("Model Performance of model 2: "+ test2 +" (Test Accuracy):")
     print('Accuracy: {:0.2f}%\nLoss: {:0.3f}\n'.format(accuracy2[1]*100, accuracy2[0]))
     
@@ -973,6 +1046,8 @@ def word_embeddings(input_data, output_data):
 
     preds = np.round(np.argmax(preds, axis=1)).astype(int)
     preds1 = np.round(np.argmax(preds1, axis=1)).astype(int)
+    result = [preds,preds1]
+    return result
 
 def plot_function(track):
     plt.subplot(221)
@@ -1077,11 +1152,11 @@ def we_output_data_transform(y_data,encoding=None):
     result = y_data
     return result
 #embeddings layer
-def embeddings_layer(X_train_emb, X_valid_emb,y_train_emb,y_valid_emb):
+def embeddings_layer(X_train_emb, X_valid_emb,y_train_emb,y_valid_emb,dense):
     emb_model = models.Sequential()
     emb_model.add(layers.Embedding(NB_WORDS, 8, input_length=MAX_LEN))
     emb_model.add(layers.Flatten())
-    emb_model.add(layers.Dense(3, activation='softmax'))
+    emb_model.add(layers.Dense(dense, activation='softmax'))
     emb_model.summary()
     emb_history = deep_model(emb_model, X_train_emb, y_train_emb, X_valid_emb, y_valid_emb)
     result = emb_history
@@ -1191,7 +1266,7 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index):
     
     return embedding_layer
 #CNN
-def cnn2(input_shape,embedding_layer1):
+def cnn2(input_shape,embedding_layer1,dense):
     print(input_shape)
     sentence_indices = Input(shape=(input_shape,))
     
@@ -1210,14 +1285,14 @@ def cnn2(input_shape,embedding_layer1):
     flatten = Flatten()(merged_tensor)
     reshape = Reshape((3*num_filters,))(flatten)
     dropout = Dropout(drop)(flatten)
-    output = Dense(units=5, activation='softmax',kernel_regularizer=regularizers.l2(0.01))(dropout)
+    output = Dense(units=dense, activation='softmax',kernel_regularizer=regularizers.l2(0.01))(dropout)
 
     # this creates a model that includes
     model = Model(sentence_indices, output)
     print(model.summary())
     return model
 #from [8] a CNN approach
-def cnn1(input_shape,embedding_layer1):
+def cnn1(input_shape,embedding_layer1,dense):
     
     sentence_indices = Input(shape=input_shape, dtype='int32')
 
@@ -1231,76 +1306,75 @@ def cnn1(input_shape,embedding_layer1):
     X = GRU(units=128, dropout=0.4, return_sequences=True)(X)
     X = LSTM(units=128, dropout=0.3)(X)
     X = Dense(units = 32, activation="relu")(X)
-    X = Dense(units=5, activation='softmax')(X)
+    X = Dense(units=dense, activation='softmax')(X)
     model = Model(inputs=sentence_indices, outputs=X)
     print(model.summary())
     return model
-def gru_model():
+def gru_model(dense):
     model = Sequential()
     model.add(Embedding(NB_WORDS, embed_dim, input_length=MAX_LEN))
     model.add(GRU(embed_dim))
-    model.add(Dense(5, activation='sigmoid'))
+    model.add(Dense(dense, activation='sigmoid'))
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
     print(model.summary())
     
     return model
-def lstm_model():
+def lstm_model(dense):
     model = Sequential()
     model.add(Embedding(NB_WORDS, embed_dim,input_length = MAX_LEN))
     model.add(SpatialDropout1D(0.4))
     model.add(LSTM(lstm_out, dropout=0.2, recurrent_dropout=0.2))
-    model.add(Dense(5,activation='softmax'))
+    model.add(Dense(dense,activation='softmax'))
     model.compile(loss = 'categorical_crossentropy', optimizer='adam',metrics = ['accuracy'])
     print(model.summary())
     
     return model
     #from https://www.kaggle.com/sakarilukkarinen/embedding-lstm-gru-and-conv1d/versions
-def gru_model2():
+def gru_model2(dense):
     m4 = Sequential()
     m4.add(Embedding(NB_WORDS, embed_dim, input_length = MAX_LEN))
     m4.add(GRU(embed_dim, dropout = 0.1, recurrent_dropout = 0.5, return_sequences = True))
     m4.add(GRU(embed_dim, activation = 'relu', dropout = 0.1, recurrent_dropout = 0.5))
-    m4.add(Dense(3, activation = 'softmax'))
+    m4.add(Dense(dense, activation = 'softmax'))
     m4.compile(optimizer = 'rmsprop', loss = 'categorical_crossentropy', metrics = ['acc'])
     print(m4.summary())
     return m4
-
-def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y_val):
+def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y_val,dense):
     callbacks = [EarlyStopping(monitor='val_loss')]
     adam = Adam(lr=1e-3)
     #you can also use rmsprop as optimizer
     loss = 'categorical_crossentropy'
     if model_type == 'cnn1':
-        model = cnn1((MAX_LEN,),embedding_layer)
+        model = cnn1((MAX_LEN,),embedding_layer,dense)
         model.compile(loss=loss,optimizer=adam,metrics=['acc'])
         track = model.fit(X_train, y_train, batch_size=128, epochs=10, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
         plot_function(track)
         model = track
     elif model_type == 'cnn2':
-        model1 = cnn2(X_train.shape[1],embedding_layer)
+        model1 = cnn2(X_train.shape[1],embedding_layer,dense)
         model1.compile(loss=loss,optimizer=adam,metrics=['acc'])
         track2 = model1.fit(X_train, y_train, batch_size=1000, epochs=10, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
         plot_function(track2)
         model = track2
     elif model_type == 'lstm':
-        LSTM_model = lstm_model()
+        LSTM_model = lstm_model(dense)
         #The model has already been compiled in the function call
         track3 = LSTM_model.fit(X_train, y_train, epochs=3, batch_size=64,validation_data=(X_val, y_val))
         plot_function(track3)
         model = track3
     elif model_type == 'gru':
-        GRU_model = gru_model()
+        GRU_model = gru_model(dense)
         #The model has already been compiled in the function call
         track2 = GRU_model.fit(X_train, y_train, epochs=3, batch_size=64,verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
         plot_function(track2)
         model = track2
     elif model_type == 'gru2':
-        gru2 = gru_model2()
+        gru2 = gru_model2(dense)
         track2 = gru2.fit(X_train, y_train, epochs=3, batch_size=64,verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
         plot_function(track2)
         model = track2
     else:
-        model = embeddings_layer(X_train,y_train,X_val,y_val)
+        model = embeddings_layer(X_train,y_train,X_val,y_val,dense)
         plot_function(model)
     #model = None
     return model

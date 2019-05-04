@@ -38,19 +38,7 @@ print("Test Code")
 '''
 result_frame = pd.DataFrame(columns=["Method","Accuracy"])
 df = pd.read_csv("testdata_exjobb.csv", encoding='ISO-8859-1')
-labels = list(df)
-labels.remove('FreeText')
-labels.remove('caseid')
-labels.remove('pout')
-labels.remove('Gender')
-labels.remove('LastContactN')
-labels.remove('hosp_ed')
-labels.remove('hosp_admit')
-labels.remove('prio')
-labels.remove('operator')
-labels.remove('hosp_icu')
-labels.remove('LastContactDays')
-labels.remove('Age')
+labels = run.create_labels_list(df)
 
 #The labels list contains all the data from columns that has hexadecimal values
 #The solution is to perform individual predictions but generate precision as metric
@@ -62,7 +50,7 @@ labels by index:
 1: FreeText
 0 can be excluded
 1 is input
-2-41 is outputs
+2-41 is outputs i.e. 40 output data: 30 with hex names and 10 with names
 index 7 (pout), index 8 (prio) and index 6 (operator) is considered multiclass
 index 2 (Age) and index 5 (LastContactDays) are considered numerical and needs
 to be categorised
@@ -83,8 +71,14 @@ single 1
 '''
 Categorise index 2 and 5
 '''
-#df = run.transformAge(df)
-#df = run.transformLCD(df)
+df = run.transformAge(df)
+df = run.transformLCD(df)
+array = run.doMultiClass(df)
+print(array[0])
+print(array[1])
+print(array[2])
+print(array[3])
+print(array[4])
 #print(df)
 #it works
 '''
@@ -96,12 +90,7 @@ Perform an Explorative data analysis
 #load output data and define if it is multiclass or not
 #input_data = df.FreeText
 #pout,prio,operator,agecat,lcdcat
-#output_MC=run.doMultiClass(df)
-#get multiclass variable
-#multiclass_yes = output_MC[5]
-#or
-#output_bin1 = run.doBinary1()
-#multiclass_no = output_bin1[5]
+
 '''
 
 
@@ -166,6 +155,21 @@ Part 2: Word Embeddings using Word2Vec,Fasttext and ANNs with LSTM, GRU and CNN
 
 
 
+'''
+
+'''
+ANNs:
+1.CNN1
+2.CNN2
+3.LSTM
+4.GRU
+5.GRU2
+6. Default
+
+embedding layers:
+0: Word2Vec
+1: fasttext (self made)
+2: fasttext downloaded from fasttext web page
 '''
 
 #outputdata = run.transform_output_data(output_data,'int')

@@ -129,6 +129,9 @@ def doBinary1part2(input_data,df):
     loss = []
     multiclass = array[5]
     array.pop(5)
+    input_data = pre_processing1(input_data,df)
+    #or
+    #input_data = pre_processing2(input_data)
     for x in range(len(array)):
         output_data = df[array[x]]
         bag_of_words2 = text_processing(input_data,output_data, None, 1)
@@ -147,6 +150,9 @@ def doMultiClasspart2(input_data,df):
     loss = []
     multiclass = array[5]
     array.pop(5)
+    input_data = pre_processing1(input_data,df)
+    #or
+    #input_data = pre_processing2(input_data)
     for x in range(len(array)):
         output_data = df[array[x]]
         bag_of_words2 = text_processing(input_data,output_data, None, 1)
@@ -173,6 +179,9 @@ def doBinary2(input_data,df,labels):
     acc = []
     loss = []
     multiclass = 'no'
+    input_data = pre_processing1(input_data,df)
+    #or
+    #input_data = pre_processing2(input_data)
     for x in range(len(labels)):
         output_data = df[labels[x]]
         bag_of_words2 = text_processing(input_data,output_data, None, 1)
@@ -195,7 +204,7 @@ ANNs:
 embedding layers:
 0: Word2Vec
 1: fasttext (self made)
-2: fasttext downloaded from fasttext web page
+2: fasttext downloaded from the fasttext web page
 '''
 def doBinary1part3(input_data,df):
     #embedding layer index 'el' in short
@@ -244,7 +253,6 @@ def doMultiClasspart3(input_data,df):
     result = we_evaluation(embedded[0],embedded1[0],embedded[1],embedded[2])
     print("Result from 1st prediction: "+ result[0]+"")
     print("Result from 2nd prediction: "+ result[1]+"")
-
 
 def transformAge(df):
     '''

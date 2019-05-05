@@ -246,7 +246,7 @@ def doMultiClasspart3(input_data,df):
     #array length is 5
     #the indexes in array and dense must match otherwise we will get errors
     output_data = df[array[4]]
-    dense =[5,5,6,5,3]
+    dense =[5,5,6,6,3]
     embedded = word_embeddings(input_data, output_data ,ANN,dense[4],el)
     ANN2 = 'cnn2'
     embedded1 = word_embeddings(input_data, output_data ,ANN2,dense[4],el)
@@ -262,15 +262,15 @@ def transformAge(df):
 
     array = []
     for i in range(len(dfage)):
-        if dfage[i] < 7:
+        if dfage[i] < 3:
             array.append(0)
-        elif dfage[i] >= 7 and dfage[i] < 19:
+        elif dfage[i] >= 3 and dfage[i] < 7:
             array.append(1)
-        elif dfage[i] >= 19 and dfage[i] < 35:
+        elif dfage[i] >= 7 and dfage[i] < 13:
             array.append(2)
-        elif dfage[i] >= 35 and dfage[i] < 55:
+        elif dfage[i] >= 13 and dfage[i] < 19:
             array.append(3)
-        elif dfage[i] >= 55 and dfage[i] < 65:
+        elif dfage[i] >= 19 and dfage[i] < 65:
             array.append(4)
         else:
             array.append(5)

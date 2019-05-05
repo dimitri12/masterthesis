@@ -264,16 +264,14 @@ def transformAge(df):
     for i in range(len(dfage)):
         if dfage[i] < 3:
             array.append(0)
-        elif dfage[i] >= 3 and dfage[i] < 7:
+        elif dfage[i] >= 3 and dfage[i] < 13:
             array.append(1)
-        elif dfage[i] >= 7 and dfage[i] < 13:
-            array.append(2)
         elif dfage[i] >= 13 and dfage[i] < 19:
-            array.append(3)
+            array.append(2)
         elif dfage[i] >= 19 and dfage[i] < 65:
-            array.append(4)
+            array.append(3)
         else:
-            array.append(5)
+            array.append(4)
     df["AgeCat"] = array
     return df
 

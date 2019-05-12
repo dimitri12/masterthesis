@@ -722,12 +722,29 @@ def remove_stopwords(input_text):
     words = input_text.split() 
     clean_words = [word for word in words if (word not in stopwords_list) and len(word) > 1] 
     return " ".join(clean_words) 
-def word_embeddings(input_data, output_data,ANN,dense,el):
+#category is binary by default
+def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     
     #Don't use stop words removal for deep learning
     #input_data = input_data.apply(remove_stopwords)
+    
     data = feature_engineering(input_data, output_data)
-    data_out = we_output_data_transform(data[2],data[3],'int')
+    data_out = we_output_data_transform(data[2],data[3])
+    '''
+    if category == None:
+        data = feature_engineering(input_data, output_data)
+        data_out = we_output_data_transform(data[2],data[3])
+    else:
+        with open('df.pickle', 'rb') as handle:
+            df = pickle.load(handle)
+        count = len(df.index)
+        data = feature_engineering(input_data, output_data)
+        dataset,data_out = we_output_data_transform(data[2],data[3],'multi')
+        data_in1 = multivectorizer(dataset)
+        data_in2 = feature_engineering(data_in1[0], data_out[:count])
+        #validation data
+        data2 = feature_engineering(data_in2[0], data_out[0])
+    '''
     
     #index 0 = X_train
     #index 1 = X_test
@@ -793,7 +810,14 @@ def word_embeddings(input_data, output_data,ANN,dense,el):
     #data[2] = y_train
     return [data_in2, data2, data]
 
-
+def multivectorization(concated):
+    tokenizer = Tokenizer(num_words=NB_WORDS, filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~', lower=True)
+    tokenizer.fit_on_texts(concated['freetext'].values)
+    sequences = tokenizer.texts_to_sequences(concated['freetext'].values)
+    word_index = tokenizer.word_index
+    X = pad_sequences(sequences, maxlen=MAX_LEN)
+    result = [X,word_index]
+    return result
 def we_evaluation(data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     
     with open('model'+ANN1+'.pickle', 'rb') as handle:
@@ -908,7 +932,7 @@ def tokenizer(train_data, test_data):
     #from [7]
     seq_lengths = train_data.apply(lambda x: len(x.split(' ')))
     print(seq_lengths.describe())
-    tk = Tokenizer(num_words = MAX_LEN,filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n', lower=True, split=" ")
+    tk = Tokenizer(num_words = NB_WORDS,filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n', lower=True, split=" ")
     tk.fit_on_texts(train_data)
     trained_seq = tk.texts_to_sequences(train_data)
     test_seq = tk.texts_to_sequences(test_data)
@@ -994,10 +1018,33 @@ def padding(trained_seq, test_seq,input):
     result = [trained_seq_trunc, test_seq_trunc]
     return result
 
-def we_output_data_transform(y_train,y_test,encoding=None):
-    if encoding == None:
-        y_train = to_categorical(np.asarray(y_train))
-        y_test = to_categorical(np.asarray(y_test))
+def we_output_data_transform(y_train,y_test,encoding='binary',category=None):
+    if encoding == 'multi':
+        with open('df.pickle', 'rb') as handle:
+            df = pickle.load(handle)
+        df1 = df['freetext']
+        df2 = df['pout']
+        frames = [df1,df2]
+        data = pd.concat(frames, axis=1, sort=False)
+        num_of_categories = df.count+1
+        shuffled = data.reindex(np.random.permutation(data.index))
+        prio1A = shuffled[shuffled['pout'] == '1A'][:num_of_categories]
+        prio1B = shuffled[shuffled['pout'] == '1B'][:num_of_categories]
+        prio2A = shuffled[shuffled['pout'] == '2A'][:num_of_categories]
+        prio2B = shuffled[shuffled['pout'] == '2B'][:num_of_categories]
+        Referal = shuffled[shuffled['pout'] == 'Referal'][:num_of_categories]
+        concated = pd.concat([prio1A,prio1B,prio2A,prio2B,Referal], ignore_index=True)
+        concated = concated.reindex(np.random.permutation(concated.index))
+        concated['LABEL'] = 0
+        concated.loc[concated['pout'] == '1A', 'LABEL'] = 0
+        concated.loc[concated['pout'] == '1B', 'LABEL'] = 1
+        concated.loc[concated['pout'] == '2A', 'LABEL'] = 2
+        concated.loc[concated['pout'] == '2B', 'LABEL'] = 3
+        concated.loc[concated['pout'] == 'Referal', 'LABEL'] = 4
+        labels = to_categorical(concated['LABEL'], num_classes=5)
+        if 'pout' in concated.keys():
+            concated.drop(['pout'], axis=1)
+        return concated,labels
     else:
         le = LabelEncoder()
         y_train_le = le.fit_transform(y_train)

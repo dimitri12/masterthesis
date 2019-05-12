@@ -41,6 +41,8 @@ print("Test Code")
 '''
 result_frame = pd.DataFrame(columns=["Method","Accuracy"])
 df = pd.read_csv("testdata_exjobb.csv", encoding='ISO-8859-1')
+with open('df.pickle', 'wb') as handle:
+        pickle.dump(df, handle, protocol=pickle.HIGHEST_PROTOCOL)
 '''
 #secret weapon
 def clean_text(txt):

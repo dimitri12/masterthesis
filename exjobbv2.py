@@ -1156,28 +1156,23 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index):
     return embedding_layer
 #CNN
 def cnn2(input_shape,embedding_layer1,dense):
-    sentence_indices = Input(shape=(input_shape,))
-    embedding = embedding_layer1(sentence_indices)
-    reshape = Reshape((input_shape,EMBEDDING_DIM,1))(embedding)
-    conv_0 = Conv2D(num_filters, (filter_sizes[0], EMBEDDING_DIM),activation='sigmoid',kernel_regularizer=regularizers.l2(0.01))(reshape)
-    conv_1 = Conv2D(num_filters, (filter_sizes[1], EMBEDDING_DIM),activation='sigmoid',kernel_regularizer=regularizers.l2(0.01))(reshape)
-    conv_2 = Conv2D(num_filters, (filter_sizes[2], EMBEDDING_DIM),activation='sigmoid',kernel_regularizer=regularizers.l2(0.01))(reshape)
-
-    maxpool_0 = MaxPooling2D((input_shape - filter_sizes[0] + 1, 1), strides=(1,1))(conv_0)
-    maxpool_1 = MaxPooling2D((input_shape - filter_sizes[1] + 1, 1), strides=(1,1))(conv_1)
-    maxpool_2 = MaxPooling2D((input_shape - filter_sizes[2] + 1, 1), strides=(1,1))(conv_2)
-
-    merged_tensor = concatenate([maxpool_0, maxpool_1, maxpool_2], axis=1)
-    flatten = Flatten()(merged_tensor)
-    reshape = Reshape((3*num_filters,))(flatten)
-    dropout = Dropout(drop)(flatten)
-    output = Dense(units=dense, activation='softmax',kernel_regularizer=regularizers.l2(0.01))(dropout)
-
-    # this creates a model that includes
-    model = Model(sentence_indices, output)
+    model = Sequential()
+    model.add(embedding_layer1)
+    model.add(Dropout(0.25))
+    model.add(Conv1D(filters, kernel_size, padding='valid', activation='relu', strides=1))
+    model.add(MaxPooling1D(pool_size=pool_size))
+    model.add(LSTM(lstm_output_size, return_sequences = True))
+    model.add(GRU(MAX_LEN))
+    model.add(Dense(MAX_LEN, activation='relu'))
+    model.add(Dense(32, activation='relu'))
+    model.add(Dense(16, activation='relu'))
+    model.add(Dense(8, activation='relu'))
+    model.add(Dense(6, activation='relu'))
+    model.add(Dense(dense,activation='softmax',kernel_regularizer=regularizers.l2(0.00000000001),activity_regularizer=regularizers.l1(0.00000000001)))
+    sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
+    model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy'])
     print(model.summary())
     return model
-
 def cnn1(input_shape,embedding_layer1,dense):
     
     model = Sequential()
@@ -1255,81 +1250,39 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
     #you can also use rmsprop as optimizer
     adam = Adam(lr=1e-3)
     loss = 'categorical_crossentropy'
-    if X_val is None:
-        if model_type == 'cnn1':
-            model = cnn1((MAX_LEN,),embedding_layer,dense)
-            model.compile(loss=loss,optimizer=adam,metrics=['acc'])
-            track = model.fit(X_train, y_train, batch_size=128, epochs=10, verbose=1,callbacks=callbacks)
-            plot_function(track)
-            #plot_performance(track)
-        elif model_type == 'cnn2':
-            model1 = cnn2(X_train.shape[1],embedding_layer,dense)
-            model1.compile(loss=loss,optimizer=adam,metrics=['acc'])
-            track2 = model1.fit(X_train, y_train, batch_size=128, epochs=10, verbose=1,callbacks=callbacks)
-            plot_function(track2)
-            #plot_performance(track2)
-            model = model1
-        elif model_type == 'lstm':
-            LSTM_model = lstm_model((MAX_LEN,),embedding_layer,dense)
-            #The model has already been compiled in the function call
-            track3 = LSTM_model.fit(X_train, y_train, epochs=10, batch_size=64,callbacks=callbacks)
-            plot_function(track3)
-            #plot_performance(track3)
-            model = LSTM_model
-        elif model_type == 'gru':
-            GRU_model = gru_model((MAX_LEN,),embedding_layer,dense)
-            #The model has already been compiled in the function call
-            track2 = GRU_model.fit(X_train, y_train, epochs=10, batch_size=64,verbose=1,callbacks=callbacks)
-            plot_function(track2)
-            #plot_performance(track2)
-            model = GRU_model
-        elif model_type == 'gru2':
-            gru2 = gru_model2((MAX_LEN,),embedding_layer,dense)
-            track2 = gru2.fit(X_train, y_train, epochs=10, batch_size=64,verbose=1,callbacks=callbacks)
-            plot_function(track2)
-            #plot_performance(track2)
-            model = gru2
-        else:
-            model = embeddings_layer(X_train,y_train,X_val,y_val,dense)
-            plot_function(model)
+    if model_type == 'cnn1':
+        model = cnn1((input_shape,),embedding_layer,dense)
+        #model.compile(loss=loss,optimizer=adam,metrics=['acc'])
+        track = model.fit(X_train, y_train, batch_size=32, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        #plot_function(track)
+        plot_performance(track)
+    elif model_type == 'cnn2':
+        model1 = cnn2((input_shape,),embedding_layer,dense)
+        model1.compile(loss=loss,optimizer=adam,metrics=['acc'])
+        track2 = model1.fit(X_train, y_train, batch_size=128, epochs=10, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        #plot_function(track2)
+        plot_performance(track2)
+        model = model1
+    elif model_type == 'lstm':
+        LSTM_model = lstm_model((input_shape,),embedding_layer,dense)
+        #The model has already been compiled in the function call
+        track3 = LSTM_model.fit(X_train, y_train, epochs=40, batch_size=32,verbose=1,shuffle=True,validation_data=(X_val, y_val))
+        #plot_function(track3)
+        plot_performance(track3)
+        model = LSTM_model
+    elif model_type == 'gru':
+        GRU_model = gru_model((input_shape,),embedding_layer,dense)
+        #The model has already been compiled in the function call
+        track2 = GRU_model.fit(X_train, y_train, epochs=25, batch_size=128,verbose=1,shuffle=True, validation_data=(X_val, y_val),callbacks=callbacks)
+        #plot_function(track2)
+        plot_performance(track2)
+        model = GRU_model
     else:
-    
-        if model_type == 'cnn1':
-            model = cnn1((input_shape,),embedding_layer,dense)
-            #model.compile(loss=loss,optimizer=adam,metrics=['acc'])
-            track = model.fit(X_train, y_train, batch_size=32, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
-            #plot_function(track)
-            plot_performance(track)
-        elif model_type == 'cnn2':
-            model1 = cnn2(X_train.shape[1],embedding_layer,dense)
-            model1.compile(loss=loss,optimizer=adam,metrics=['acc'])
-            track2 = model1.fit(X_train, y_train, batch_size=128, epochs=10, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
-            #plot_function(track2)
-            plot_performance(track2)
-            model = model1
-        elif model_type == 'lstm':
-            LSTM_model = lstm_model((input_shape,),embedding_layer,dense)
-            #The model has already been compiled in the function call
-            track3 = LSTM_model.fit(X_train, y_train, epochs=40, batch_size=32,verbose=1,shuffle=True,validation_data=(X_val, y_val))
-            #plot_function(track3)
-            plot_performance(track3)
-            model = LSTM_model
-        elif model_type == 'gru':
-            GRU_model = gru_model((input_shape,),embedding_layer,dense)
-            #The model has already been compiled in the function call
-            track2 = GRU_model.fit(X_train, y_train, epochs=25, batch_size=128,verbose=1,shuffle=True, validation_data=(X_val, y_val),callbacks=callbacks)
-            #plot_function(track2)
-            plot_performance(track2)
-            model = GRU_model
-        elif model_type == 'gru2':
-            gru2 = gru_model2((input_shape,),embedding_layer,dense)
-            track2 = gru2.fit(X_train, y_train, epochs=40, batch_size=32,verbose=1,shuffle=True, validation_data=(X_val, y_val))
-            #plot_function(track2)
-            plot_performance(track2)
-            model = gru2
-        else:
-            model = embeddings_layer(X_train,y_train,X_val,y_val,dense)
-            plot_function(model)
+        gru2 = gru_model2((input_shape,),embedding_layer,dense)
+        track2 = gru2.fit(X_train, y_train, epochs=40, batch_size=32,verbose=1,shuffle=True, validation_data=(X_val, y_val))
+        #plot_function(track2)
+        plot_performance(track2)
+        model = gru2
     #model = None
     return model
 def plot_model_performace(result):

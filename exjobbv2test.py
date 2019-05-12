@@ -1,3 +1,4 @@
+#-*- coding: utf-8 -*-
 import sys
 import pandas as pd
 sys.path.append("/Users/dimitrigharam/Desktop/exjobb")
@@ -7,6 +8,8 @@ from nltk.corpus import stopwords
 import numpy as npa
 from sklearn.pipeline import Pipeline
 from sklearn import metrics
+import pickle
+import string
 '''
 By: Dimitri Gharam
 This code will perform aside of preprocessing test 21 approaches of embeddings and encodings (15 encodings and 6 embeddings)
@@ -38,7 +41,15 @@ print("Test Code")
 '''
 result_frame = pd.DataFrame(columns=["Method","Accuracy"])
 df = pd.read_csv("testdata_exjobb.csv", encoding='ISO-8859-1')
-labels = run.create_labels_list(df)
+'''
+#secret weapon
+def clean_text(txt):
+    txt = "".join(v for v in txt if v not in string.punctuation).lower()
+    txt = txt.encode("utf8").decode('utf8', 'ignore')
+    return txt
+text = input_data.apply(clean_text)
+'''
+#labels = run.create_labels_list(df)
 
 #The labels list contains all the data from columns that has hexadecimal values
 #The solution is to perform individual predictions but generate precision as metric
@@ -73,12 +84,8 @@ Categorise index 2 and 5
 '''
 df = run.transformAge(df)
 df = run.transformLCD(df)
-array = run.doMultiClass(df)
-print(array[0])
-print(array[1])
-print(array[2])
-print(array[3])
-print(array[4])
+
+#array = run.doMultiClass(df)
 #print(df)
 #it works
 '''
@@ -88,7 +95,9 @@ Perform an Explorative data analysis
 #run.eda(df)
 
 #load output data and define if it is multiclass or not
-#input_data = df.FreeText
+input_data = df.FreeText.astype(str)
+input_data1 = df.iloc[:,1:2].FreeText.astype(str)
+
 #pout,prio,operator,agecat,lcdcat
 
 '''
@@ -101,15 +110,40 @@ Part 1: Text Classification with BoW and TF-IDF
 
 
 '''
-'''
+
 print("##################################")
 print("Preprocessing:")
 print("----------------------------------")
-preproc1 = run.pre_processing1(df.FreeText,df)
-preproc2 = np.vectorize(run.pre_processing2)
+'''
+preproc1 = run.pre_processing1(input_data,df)
+preproc2 = npa.vectorize(run.pre_processing2)
 preproc2 = preproc2(df.FreeText)
+preproc3 = run.pre_processing1(input_data1,df)
+preproc4 = npa.vectorize(run.pre_processing2)
+preproc4 = preproc4(input_data1)
+'''
+'''
+#save
+with open('preproc1.pickle', 'wb') as handle:
+    pickle.dump(preproc1, handle, protocol=pickle.HIGHEST_PROTOCOL)
+with open('preproc2.pickle', 'wb') as handle:
+    pickle.dump(preproc2, handle, protocol=pickle.HIGHEST_PROTOCOL)
+with open('preproc3.pickle', 'wb') as handle:
+    pickle.dump(preproc3, handle, protocol=pickle.HIGHEST_PROTOCOL)
+with open('preproc4.pickle', 'wb') as handle:
+    pickle.dump(preproc4, handle, protocol=pickle.HIGHEST_PROTOCOL)
+'''
+#load
+with open('preproc1.pickle', 'rb') as handle:
+    input_data = pickle.load(handle)
+#input_data = preproc1
+#input_data = preproc2
+#input_data = preproc3
+#input_data = preproc4
+output_data = df.hosp_ed
 print("Preprocessing finished")
 print("##################################")
+'''
 print("Transforming output data:")
 print("----------------------------------")
 outputdata = run.transform_output_data(output_data)
@@ -119,30 +153,51 @@ input_data = preproc2
 #print(outputdata2)
 print("Inverse Transforming:")
 inv_output = run.inverse_transform_output_data(outputdata.NewPout)
+'''
 print("Embedding/Encoding/Processing starting")
 print("----------------------------------")
 #the result from these encodings are arrays containing training and test data for both the input and output
 #in order: input_train, input_test, output_train, output_test
-bag_of_words2 = run.text_processing(input_data,outputdata2, None, 1)
-tf_idf2 = run.text_processing(input_data,outputdata2, "tfidf", 1)
-data_array = [bag_of_words2,tf_idf2]
-print(tf_idf2)
-
-print("Embedding/Encoding/Processing is finished")
 '''
+
+bow = run.text_processing(input_data,output_data, None, 1)
+tfidf = run.text_processing(input_data,output_data, "tfidf", 1)
+
+with open('bow.pickle', 'wb') as handle:
+    pickle.dump(bow, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+with open('bow.tfidf', 'wb') as handle:
+    pickle.dump(tfidf, handle, protocol=pickle.HIGHEST_PROTOCOL)
+'''
+'''
+with open('bow.pickle', 'rb') as handle:
+    bow = pickle.load(handle)
+with open('bow.tfidf', 'rb') as handle:
+    tfidf = pickle.load(handle)
+'''
+'''
+data_array = [bow,tfidf]
+multiclass = 'yes'
+result = run.predictor(data_array,'NBM',multiclass)
+run.generate_metrics(result,'NBM')
+
+#index 0=BOW
+#index1=TF*IDF
+#index[0][0] true data for BoW
+#index[0][1] predicted data for BoW
+#index[0][2] accuracy for BoW
+#if log reg is used: #index[0][3] is loss for BoW
+#else #index[0][3] is pred_proba for BoW
+#run.plot_roc(result[0][3],result[0][0])
+#run.plot_roc(result[1][3],result[1][0])
+#run.plot_metrics(run.create_plot_data(result1,'NBM'))
+'''
+print("Embedding/Encoding/Processing is finished")
+
 print("##################################")
 print("Modeling and prediction:")
 print("----------------------------------")
 
-#result = run.doMultiClasspart2(input_data,df)
-#run.plot_metrics(create_plot_data(result,None))
-#run.plot_roc(result[1][0],result[1][1])
-#result1 = run.doBinary2(input_data,df,labels)
-#run.plot_metrics(create_plot_data(result1,None))
-#run.plot_roc(result1[1][0],result1[1][1])
-#result2 = run.doBinary1part2(input_data,df)
-#run.plot_metrics(create_plot_data(result2,None))
-#run.plot_roc(result2[1][0],result1[2][1])
 
 print("Modeling and prediction finished")
 print("##################################")
@@ -173,8 +228,20 @@ embedding layers:
 '''
 
 #outputdata = run.transform_output_data(output_data,'int')
-
+ANN1 = 'lstm'
+ANN2 = 'gru2'
 #print(outputdata)
-#test = run.word_embeddings(input_data, output_data)
+
+
+input_data = df.FreeText.astype(str)
+input_data1 = df.iloc[:,1:2].FreeText.astype(str)
+test = run.word_embeddings(input_data, output_data,ANN1,2,1)
+test1 = run.word_embeddings(input_data, output_data,ANN2,2,0)
+
+run.we_evaluation(test[0],test[1],test1[0],test1[1],ANN1,ANN2,test[2],test1[2])
+
+
+
+
 print("##################################")
 print("Done")

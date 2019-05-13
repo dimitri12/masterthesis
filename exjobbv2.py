@@ -84,7 +84,7 @@ NB_WORDS = 116  # Parameter indicating the number of words we'll put in the dict
 VAL_SIZE = 9  # Size of the validation set (originally 1000)
 NB_START_EPOCHS = 8  # Number of epochs we usually start to train with
 BATCH_SIZE = 512  # Size of the batches used in the mini-batch gradient descent
-MAX_LEN = 62  # Maximum number of words in a sequence
+MAX_LEN = 72  # Maximum number of words in a sequence
 #MAX_LEN = 62
 GLOVE_DIM = 50  # Number of dimensions of the GloVe word embeddings
 MAX_SEQUENCE_LENGTH = 30
@@ -752,7 +752,7 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     #index 3 = y_test
     assert data[0].shape[0] == data[2].shape[0]
     assert data[1].shape[0] == data[3].shape[0]
-    data_in1 = tokenizer(data[0], data[1])
+    data_in1 = tokenizer(input_data,data[0], data[1])
     
     print(data_in1[2])
     data_in2 = padding(data_in1[0], data_in1[1],input_data)
@@ -811,7 +811,7 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     return [data_in2, data2, data]
 
 def multivectorization(concated):
-    tokenizer = Tokenizer(num_words=NB_WORDS, filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~', lower=True)
+    tokenizer = Tokenizer(filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~', lower=True)
     tokenizer.fit_on_texts(concated['freetext'].values)
     sequences = tokenizer.texts_to_sequences(concated['freetext'].values)
     word_index = tokenizer.word_index
@@ -928,12 +928,17 @@ def plot_function(track):
     plt.legend(['train'], loc='upper left')
     plt.show()
 #tokenizes the words
-def tokenizer(train_data, test_data):
+def tokenizer(input_data,train_data, test_data):
     #from [7]
-    seq_lengths = train_data.apply(lambda x: len(x.split(' ')))
+    seq_lengths = input_data.apply(lambda x: len(x.split(' ')))
     print(seq_lengths.describe())
-    tk = Tokenizer(num_words = NB_WORDS,filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n', lower=True, split=" ")
-    tk.fit_on_texts(train_data)
+    
+    
+    max_sequence_len = max([len(x) for x in input_data])
+    print(max_sequence_len)
+    
+    tk = Tokenizer(num_words=max_sequence_len,filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n', lower=True, split=" ")
+    tk.fit_on_texts(input_data)
     trained_seq = tk.texts_to_sequences(train_data)
     test_seq = tk.texts_to_sequences(test_data)
     word_index = tk.word_index
@@ -1007,11 +1012,8 @@ def plot_performance(history=None, figure_directory=None, ylim_pad=[0, 0]):
     plt.show()
 #in [7] padding is used to fill out null values
 def padding(trained_seq, test_seq,input):
-    '''
-    max_sequence_len = max([len(x) for x in input])
-    global MAX_SEQUENCE_LENGTH
-    MAX_SEQUENCE_LENGTH = 45
-    '''
+    
+    
     trained_seq_trunc = pad_sequences(trained_seq, maxlen=MAX_LEN)
     
     test_seq_trunc = pad_sequences(test_seq, maxlen=MAX_LEN)

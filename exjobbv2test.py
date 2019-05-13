@@ -1,5 +1,9 @@
 #-*- coding: utf-8 -*-
 import sys
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+import matplotlib.cm as cmx
 import pandas as pd
 sys.path.append("/Users/dimitrigharam/Desktop/exjobb")
 import exjobbv2 as run
@@ -10,6 +14,8 @@ from sklearn.pipeline import Pipeline
 from sklearn import metrics
 import pickle
 import string
+from gensim.models import word2vec
+from collections import Counter
 '''
 By: Dimitri Gharam
 This code will perform aside of preprocessing test 21 approaches of embeddings and encodings (15 encodings and 6 embeddings)
@@ -235,15 +241,30 @@ ANN2 = 'gru2'
 #print(outputdata)
 
 
+'''
 input_data = df.FreeText.astype(str)
 input_data1 = df.iloc[:,1:2].FreeText.astype(str)
+
 test = run.word_embeddings(input_data, output_data,ANN1,2,1)
 test1 = run.word_embeddings(input_data, output_data,ANN2,2,0)
 
 run.we_evaluation(test[0],test[1],test1[0],test1[1],ANN1,ANN2,test[2],test1[2])
 
+#run.eda1(df)
+#run.eda2(df)
+df["FreeText_len"] = df["FreeText"].apply(lambda x: len(x))
+print(df['FreeText_len'].sum())
 
 
+data cleaning
+#this works
+df['FreeText'] = [run.cleaning(s) for s in df['FreeText']]
+input_data = df['FreeText']
+run.word_cloud(input_data)
+#this also works
+#run.word_cloud(input_data.apply(run.clean_text))
+'''
 
 print("##################################")
 print("Done")
+

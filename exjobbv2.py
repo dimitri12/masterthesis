@@ -13,6 +13,7 @@ import io
 from numpy import array
 import pandas as pd
 import numpy as np
+from wordcloud import WordCloud
 from sklearn.model_selection import cross_val_predict
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import OneHotEncoder, scale 
@@ -72,22 +73,26 @@ from gensim.models.wrappers import FastText
 import matplotlib.patches as patches
 import time
 import datetime
+from gensim.models import word2vec
 import warnings
 import pickle
+from sklearn.manifold import TSNE
+from collections import Counter
+import string
 warnings.filterwarnings(action='ignore', category=DataConversionWarning)
 warnings.filterwarnings(action='ignore', category=FutureWarning)
 warnings.filterwarnings(action='ignore')
 
 #Global Variables from [7] and others
-NB_WORDS = 116  # Parameter indicating the number of words we'll put in the dictionary, 
-#there is a variable in the tokenizer function that can help 
+NB_WORDS = 4900  # Parameter indicating the number of words we'll put in the dictionary 
+
 VAL_SIZE = 9  # Size of the validation set (originally 1000)
 NB_START_EPOCHS = 8  # Number of epochs we usually start to train with
 BATCH_SIZE = 512  # Size of the batches used in the mini-batch gradient descent
 MAX_LEN = 72  # Maximum number of words in a sequence
 #MAX_LEN = 62
 GLOVE_DIM = 50  # Number of dimensions of the GloVe word embeddings
-MAX_SEQUENCE_LENGTH = 30
+MAX_SEQUENCE_LENGTH = 463
 MAX_NB_WORDS = 20000
 EMBEDDING_DIM = 100
 VALIDATION_SPLIT = 0.1
@@ -109,7 +114,71 @@ filters = 64
 pool_size = 4
 lstm_output_size = 70
 
+def cleaning(s):
+    s = str(s)
+    s = s.lower()
+    s = re.sub(r'\s\W',' ',s)
+    s = re.sub(r'\W,\s',' ',s)
+    s = re.sub(r'[^\w]', ' ', s)
+    s = re.sub(r"\d+", "", s)
+    s = re.sub(r'\s+',' ',s)
+    s = re.sub(r'[!@#$_]', '', s)
+    s = s.replace("co","")
+    s = s.replace("https","")
+    s = s.replace(",","")
+    s = s.replace("[\w*"," ")
+    return s
+def clean_text(txt):
+    txt = "".join(v for v in txt if v not in string.punctuation).lower()
+    txt = txt.encode("utf8").decode('utf8', 'ignore')
+    return txt
 
+def build_corpus(data):
+    "Creates a list of lists containing words from each sentence"
+    data['FreeText'] = [cleaning(s) for s in data['FreeText']]
+    corpus = []
+    for col in ['FreeText']:
+        for sentence in data[col].iteritems():
+            word_list = sentence[1].split(" ")
+            corpus.append(word_list)
+    
+    with open('corpus.pickle', 'wb') as handle:
+        pickle.dump(corpus, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    return corpus
+def tsne_plot(df):
+    corpus = build_corpus(df)
+    
+    model = word2vec.Word2Vec(corpus, size=100, window=20, min_count=1, workers=4)
+    with open('w2vmodel.pickle', 'wb') as handle:
+        pickle.dump(model, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    #model.most_similar('')
+    "Creates and TSNE model and plots it"
+    labels = []
+    tokens = []
+
+    for word in model.wv.vocab:
+        tokens.append(model[word])
+        labels.append(word)
+    
+    tsne_model = TSNE(perplexity=40, n_components=2, init='pca', n_iter=2500, random_state=23)
+    new_values = tsne_model.fit_transform(tokens)
+
+    x = []
+    y = []
+    for value in new_values:
+        x.append(value[0])
+        y.append(value[1])
+        
+    plt.figure(figsize=(16, 16)) 
+    for i in range(len(x)):
+        plt.scatter(x[i],y[i])
+        plt.annotate(labels[i],
+                     xy=(x[i], y[i]),
+                     xytext=(5, 2),
+                     textcoords='offset points',
+                     ha='right',
+                     va='bottom')
+    plt.show()
 
 def transformAge(df):
     '''
@@ -151,7 +220,7 @@ def transformLCD(df):
 def test_code(input):
     print("Hello " + input)
 
-def eda(df):
+def eda1(df):
     figsize=(20, 10)
     
     ticksize = 14
@@ -244,7 +313,56 @@ def eda(df):
 
     plt.plot()
     plt.show()
+def eda2(df):
+    #max number of words in a sentence
+    df1 = pd.DataFrame(df)
+    df1['FreeText_count'] = df['FreeText'].apply(lambda x: Counter(x.split(' ')))
+    LEN = df1['FreeText_count'].apply(lambda x : sum(x.values()))
+    max_LEN = max(LEN)
+    global MAX_LEN
+    MAX_LEN = max_LEN
+    #length of sequence
+    df["FreeText_len"] = df["FreeText"].apply(lambda x: len(x))
+    #maximum number of sequence length
+    #print(df["FreeText_len"].max())
+    df["FreeText_len"].hist(figsize = (15, 10), bins = 100)
+    plt.show()
+    global MAX_SEQUENCE_LENGTH
+    MAX_SEQUENCE_LENGTH = df["FreeText_len"].max()
+    global NB_WORDS
+    NB_WORDS = df['FreeText_len'].sum()
+    #word EDA
+    dummies2 = df.iloc[:,1:2]
+    tsne_plot(dummies2)
+    #wordcloud
+    df['FreeText'] = [cleaning(s) for s in df['FreeText']]
+    input_data = df['FreeText']
+    word_cloud(input_data)
+    with open('corpus.pickle', 'rb') as handle:
+        corpus = pickle.load(handle)
+    xt = np.concatenate(corpus)
+    plt.figure(figsize=(20,10))
+    pd.value_counts(xt).plot(kind="barh")
+    plt.show()
+    
+def word_cloud(input_data,title=None):
+    wordcloud = WordCloud(
+        background_color = 'white',
+        max_words = 200,
+        max_font_size = 40, 
+        scale = 3,
+        random_state = 42
+    ).generate(str(input_data))
 
+    fig = plt.figure(1, figsize = (20, 20))
+    plt.axis('off')
+    if title: 
+        fig.suptitle(title, fontsize = 20)
+        fig.subplots_adjust(top = 2.3)
+
+    plt.imshow(wordcloud)
+    plt.show()
+    
 #preprocessing function. use the dummies as input
 def pre_processing1(input,df):
     sentence = [None] * df.shape[0]
@@ -1158,6 +1276,7 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index):
     return embedding_layer
 #CNN
 def cnn2(input_shape,embedding_layer1,dense):
+    dense = dense-1
     model = Sequential()
     model.add(embedding_layer1)
     model.add(Dropout(0.25))
@@ -1171,12 +1290,12 @@ def cnn2(input_shape,embedding_layer1,dense):
     model.add(Dense(8, activation='relu'))
     model.add(Dense(6, activation='relu'))
     model.add(Dense(dense,activation='softmax',kernel_regularizer=regularizers.l2(0.00000000001),activity_regularizer=regularizers.l1(0.00000000001)))
-    sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
+    #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
     model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy'])
     print(model.summary())
     return model
 def cnn1(input_shape,embedding_layer1,dense):
-    
+    dense = dense-1
     model = Sequential()
     model.add(embedding_layer1)
     model.add(Dropout(0.25))
@@ -1189,23 +1308,25 @@ def cnn1(input_shape,embedding_layer1,dense):
     model.add(Dense(8, activation='relu'))
     model.add(Dense(6, activation='relu'))
     model.add(Dense(dense,activation='softmax',kernel_regularizer=regularizers.l2(0.00000000001),activity_regularizer=regularizers.l1(0.00000000001)))
-    sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
+    #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
     model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy'])
     print(model.summary())
     return model
 def gru_model(input_shape,embedding_layer1,dense):
+    dense = dense-1
     model = Sequential()
     model.add(embedding_layer1)
     model.add(GRU(300))
     #model.add(Dropout(0.5))
     model.add(Dense(MAX_LEN, activation='relu'))
     model.add(Dense(dense, activation='sigmoid',kernel_regularizer=regularizers.l1(0.00000000001),activity_regularizer=regularizers.l2(0.00000000001)))
-    sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
-    model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
+    #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
     print(model.summary())
     
     return model
 def lstm_model(input_shape,embedding_layer1,dense):
+    dense = dense-1
     model = Sequential()
     model.add(embedding_layer1)
     #model.add(SpatialDropout1D(0.25))
@@ -1218,17 +1339,19 @@ def lstm_model(input_shape,embedding_layer1,dense):
     model.add(Dense(MAX_LEN, activation='relu'))
     model.add(Dropout(0.001))
     model.add(Dense(32, activation='relu'))
+    model.add(Dropout(0.01))
     model.add(Dense(6, activation='relu'))
 
     #,kernel_regularizer=regularizers.l2(0.01),activity_regularizer=regularizers.l1(0.00000000001)
     model.add(Dense(dense,activation='softmax',kernel_regularizer=regularizers.l2(0.00000000001),activity_regularizer=regularizers.l1(0.00000000001)))
-    sgd = SGD(lr=0.1, decay=1e-6, momentum=1.0, nesterov=True)
+    #sgd = SGD(lr=0.1, decay=1e-6, momentum=1.0, nesterov=True)
     model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy'])
     print(model.summary())
     
     return model
     #from https://www.kaggle.com/sakarilukkarinen/embedding-lstm-gru-and-conv1d/versions
 def gru_model2(input_shape,embedding_layer1,dense):
+    dense = dense-1
     model = Sequential()
     model.add(embedding_layer1)
     model.add(GRU(MAX_LEN, return_sequences = True))
@@ -1242,7 +1365,7 @@ def gru_model2(input_shape,embedding_layer1,dense):
     model.add(Dense(32, activation='relu'))
     model.add(Dense(6, activation='relu'))
     model.add(Dense(dense, activation = 'softmax',kernel_regularizer=regularizers.l2(0.00000000001),activity_regularizer=regularizers.l1(0.00000000001)))
-    sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
+    #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
     model.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
     print(model.summary())
     return model

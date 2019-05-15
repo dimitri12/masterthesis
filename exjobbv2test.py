@@ -237,19 +237,19 @@ embedding layers:
 
 #outputdata = run.transform_output_data(output_data,'int')
 ANN1 = 'lstm'
-ANN2 = 'gru2'
+ANN2 = 'gru'
 #print(outputdata)
 
 
-'''
+df['FreeText'] = [run.cleaning(s) for s in df['FreeText']]
 input_data = df.FreeText.astype(str)
 input_data1 = df.iloc[:,1:2].FreeText.astype(str)
 
 test = run.word_embeddings(input_data, output_data,ANN1,2,1)
-test1 = run.word_embeddings(input_data, output_data,ANN2,2,0)
+test1 = run.word_embeddings(input_data, output_data,ANN2,2,1)
 
 run.we_evaluation(test[0],test[1],test1[0],test1[1],ANN1,ANN2,test[2],test1[2])
-
+'''
 #run.eda1(df)
 #run.eda2(df)
 df["FreeText_len"] = df["FreeText"].apply(lambda x: len(x))

@@ -58,7 +58,7 @@ from keras import models
 from keras import layers
 from keras import regularizers
 from gensim.models import FastText
-from keras.layers import Dense, Input, LSTM, GRU, Conv1D, MaxPooling1D, Dropout, Concatenate, Conv2D, MaxPooling2D, concatenate
+from keras.layers import Dense, Input, LSTM, GRU, Conv1D, MaxPooling1D, Dropout, Concatenate, Conv2D, MaxPooling2D, concatenate,BatchNormalization, Bidirectional
 from keras.initializers import glorot_uniform
 from gensim.models.keyedvectors import KeyedVectors
 from keras.layers.core import Reshape, Flatten
@@ -874,7 +874,9 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     
     print(data_in1[2])
     data_in2 = padding(data_in1[0], data_in1[1],input_data)
-    
+    '''
+    data_in21 = vectorize_sequences(input_data)
+    '''
     
     #create validation data 
     data2 = feature_engineering(data_in2[0], data_out[0])
@@ -927,7 +929,11 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     #data_in2[0] = X_train
     #data[2] = y_train
     return [data_in2, data2, data]
-
+def vectorize_sequences(sequences, dimension=4900):
+    results = np.zeros((len(sequences), dimension))
+    for i, sequence in enumerate(sequences):
+        results[i, sequence] = 1.
+    return results
 def multivectorization(concated):
     tokenizer = Tokenizer(filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~', lower=True)
     tokenizer.fit_on_texts(concated['freetext'].values)
@@ -942,8 +948,8 @@ def we_evaluation(data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
         model = pickle.load(handle)
     with open('model'+ANN2+'.pickle', 'rb') as handle:
         model1 = pickle.load(handle)
-    preds1 = model.predict(data1[1])
-    preds2 = model1.predict(data3[1])
+    preds1 = model.predict(data1[1],batch_size=13)
+    preds2 = model1.predict(data3[1],batch_size=13)
     preds1 = np.argmax(preds1, axis=-1)
     preds2 = np.argmax(preds2, axis=-1)
     print(datax[3])
@@ -961,9 +967,6 @@ def we_evaluation(data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     with open('test_data2.pickle', 'wb') as handle:
         pickle.dump(datay[3], handle, protocol=pickle.HIGHEST_PROTOCOL)
     
-    
-    
-    
     #or
     #preds2 = model.predict_classes(data_in2[1])
     '''
@@ -974,10 +977,10 @@ def we_evaluation(data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     test1 = ANN1
     test2 = ANN2
  
-    accuracy1 = model.evaluate(data2[1], data2[3], verbose=1)
+    accuracy1 = model.evaluate(data2[1], data2[3], verbose=0)
     print("Model Performance of model 1: "+ test1 +" (Test Accuracy):")
     print('Accuracy: {:0.2f}%\nLoss: {:0.3f}\n'.format(accuracy1[1]*100, accuracy1[1]))
-    accuracy2 = model1.evaluate(data4[1], data4[3], verbose=1)
+    accuracy2 = model1.evaluate(data4[1], data4[3], verbose=0)
     print("Model Performance of model 2: "+ test2 +" (Test Accuracy):")
     print('Accuracy: {:0.2f}%\nLoss: {:0.3f}\n'.format(accuracy2[1]*100, accuracy2[1]))
     
@@ -1055,7 +1058,7 @@ def tokenizer(input_data,train_data, test_data):
     max_sequence_len = max([len(x) for x in input_data])
     print(max_sequence_len)
     
-    tk = Tokenizer(num_words=max_sequence_len,filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n', lower=True, split=" ")
+    tk = Tokenizer(num_words=NB_WORDS,filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n', lower=True, split=" ")
     tk.fit_on_texts(input_data)
     trained_seq = tk.texts_to_sequences(train_data)
     test_seq = tk.texts_to_sequences(test_data)
@@ -1132,14 +1135,17 @@ def plot_performance(history=None, figure_directory=None, ylim_pad=[0, 0]):
 def padding(trained_seq, test_seq,input):
     
     
-    trained_seq_trunc = pad_sequences(trained_seq, maxlen=MAX_LEN)
+    trained_seq_trunc = pad_sequences(trained_seq,maxlen=MAX_LEN)
     
-    test_seq_trunc = pad_sequences(test_seq, maxlen=MAX_LEN)
+    test_seq_trunc = pad_sequences(test_seq,maxlen=MAX_LEN)
     result = [trained_seq_trunc, test_seq_trunc]
     return result
 
 def we_output_data_transform(y_train,y_test,encoding='binary',category=None):
     if encoding == 'multi':
+        '''
+        From Peter Nagy, Kaggle, https://www.kaggle.com/ngyptr/multi-class-classification-with-lstm
+        '''
         with open('df.pickle', 'rb') as handle:
             df = pickle.load(handle)
         df1 = df['freetext']
@@ -1169,8 +1175,8 @@ def we_output_data_transform(y_train,y_test,encoding='binary',category=None):
         le = LabelEncoder()
         y_train_le = le.fit_transform(y_train)
         y_test_le = le.fit_transform(y_test)
-        y_train = to_categorical(y_train_le)
-        y_test = to_categorical(y_test_le)
+        y_train = to_categorical(y_train_le).astype('float32')
+        y_test = to_categorical(y_test_le).astype('float32')
     result = [y_train,y_test]
     return result
 #embeddings layer
@@ -1252,7 +1258,8 @@ def load_vectors_word2vec(fname,word_index):
         except KeyError:
             embedding_matrix[i]=np.random.normal(0,np.sqrt(0.25),EMBEDDING_DIM)
     del(word_vectors)
-    embedding_layer = Embedding(vocabulary_size,EMBEDDING_DIM,weights=[embedding_matrix],trainable=False,input_length = MAX_LEN)
+    embedding_layer = Embedding(vocabulary_size,EMBEDDING_DIM,weights=[embedding_matrix],trainable=True,input_length = MAX_LEN)
+    embedding_layer.build(MAX_LEN)
     return embedding_layer
 #[8]
 def pretrained_embedding_layer(word_to_vec_map, word_to_index):
@@ -1268,149 +1275,296 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index):
     for word, index in word_to_index.items():
         emb_matrix[index, :] = word_to_vec_map[word]
 
-    embedding_layer = Embedding(input_dim = vocab_len, output_dim = emb_dim, trainable = False,input_length = MAX_LEN) 
+    embedding_layer = Embedding(input_dim = vocab_len, output_dim = emb_dim, trainable = True,input_length = MAX_LEN) 
 
-    embedding_layer.build((None,))
+    embedding_layer.build(MAX_LEN)
     embedding_layer.set_weights([emb_matrix])
     
     return embedding_layer
-#CNN
+#bilstm
+def bilstm(input_shape,embedding_layer1,dense):
+    model = Sequential()
+    model.add(embedding_layer1)
+    #model.add(SpatialDropout1D(0.1))
+    model.add(BatchNormalization())
+    model.add(Bidirectional(LSTM(MAX_LEN, dropout_U = 0.2, dropout_W = 0.2)))
+    '''
+    model.add(Dense(4, activation='relu',input_dim=MAX_LEN))
+    
+    model.add(BatchNormalization())
+    
+    #model.add(Dropout(0.5))
+    model.add(Dense(3, activation='relu'))
+    model.add(BatchNormalization())
+    '''
+    model.add(Dense(dense, activation='sigmoid'))
+    #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
+    
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    print(model.summary())
+    return model
 def cnn2(input_shape,embedding_layer1,dense):
-    dense = dense-1
+    
     model = Sequential()
     model.add(embedding_layer1)
     model.add(Dropout(0.25))
     model.add(Conv1D(filters, kernel_size, padding='valid', activation='relu', strides=1))
     model.add(MaxPooling1D(pool_size=pool_size))
-    model.add(LSTM(lstm_output_size, return_sequences = True))
+    model.add(LSTM(MAX_LEN, return_sequences = True))
     model.add(GRU(MAX_LEN))
+    '''
     model.add(Dense(MAX_LEN, activation='relu'))
     model.add(Dense(32, activation='relu'))
     model.add(Dense(16, activation='relu'))
     model.add(Dense(8, activation='relu'))
     model.add(Dense(6, activation='relu'))
+    '''
     model.add(Dense(dense,activation='softmax',kernel_regularizer=regularizers.l2(0.00000000001),activity_regularizer=regularizers.l1(0.00000000001)))
     #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
     model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy'])
     print(model.summary())
     return model
 def cnn1(input_shape,embedding_layer1,dense):
-    dense = dense-1
+    
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(Dropout(0.25))
+    model.add(Dropout(0.1))
     model.add(Conv1D(filters, kernel_size, padding='valid', activation='relu', strides=1))
     model.add(MaxPooling1D(pool_size=pool_size))
-    model.add(LSTM(lstm_output_size))
+    model.add(LSTM(MAX_LEN))
+    '''
     model.add(Dense(MAX_LEN, activation='relu'))
     model.add(Dense(32, activation='relu'))
     model.add(Dense(16, activation='relu'))
     model.add(Dense(8, activation='relu'))
     model.add(Dense(6, activation='relu'))
-    model.add(Dense(dense,activation='softmax',kernel_regularizer=regularizers.l2(0.00000000001),activity_regularizer=regularizers.l1(0.00000000001)))
+    '''
+    model.add(Dense(dense,activation='softmax',kernel_regularizer=regularizers.l1(0.01),activity_regularizer=regularizers.l2(0.01)))
     #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
     model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy'])
     print(model.summary())
     return model
 def gru_model(input_shape,embedding_layer1,dense):
-    dense = dense-1
+    
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(GRU(300))
+    model.add(BatchNormalization())
+    model.add(GRU(32,activation='relu'))
+    #model.add(Dropout(0.2))
+    
+    #model.add(Dense(4, activation='relu',input_dim=MAX_LEN))
+    
+    model.add(BatchNormalization())
+    '''
     #model.add(Dropout(0.5))
-    model.add(Dense(MAX_LEN, activation='relu'))
-    model.add(Dense(dense, activation='sigmoid',kernel_regularizer=regularizers.l1(0.00000000001),activity_regularizer=regularizers.l2(0.00000000001)))
+    model.add(Dense(3, activation='relu'))
+    model.add(BatchNormalization())
+    '''
+    model.add(Dense(dense, activation='sigmoid'))
     #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
+    
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
     print(model.summary())
     
     return model
 def lstm_model(input_shape,embedding_layer1,dense):
-    dense = dense-1
+    
     model = Sequential()
     model.add(embedding_layer1)
-    #model.add(SpatialDropout1D(0.25))
-    model.add(LSTM(MAX_LEN))
+    #model.add(SpatialDropout1D(0.1))
+    model.add(BatchNormalization())
+    model.add(LSTM(32,activation='relu'))
+    '''
+    #model.add(Dropout(0.5))
+    #model.add(BatchNormalization())
+    
+    model.add(Dense(32, activation='relu',input_dim=MAX_LEN))
+    model.add(Dropout(0.1))
+    model.add(Dense(3, activation='relu',input_dim=MAX_LEN))
+    model.add(Dropout(0.1))
+    model.add(Dense(2, activation='relu'))
+    model.add(BatchNormalization())
+    
+    
+    #model.add(BatchNormalization())
+    
+    
+    #model.add(BatchNormalization())
+    
+    
     model.add(Dropout(0.0001))
-    model.add(Dense(MAX_LEN, activation='relu'))
+    model.add(Dense(12, activation='relu'))
     model.add(Dropout(0.0001))
-    model.add(Dense(MAX_LEN, activation='relu'))
-    model.add(Dropout(0.0001))
-    model.add(Dense(MAX_LEN, activation='relu'))
-    model.add(Dropout(0.001))
-    model.add(Dense(32, activation='relu'))
-    model.add(Dropout(0.01))
-    model.add(Dense(6, activation='relu'))
-
+    '''
     #,kernel_regularizer=regularizers.l2(0.01),activity_regularizer=regularizers.l1(0.00000000001)
-    model.add(Dense(dense,activation='softmax',kernel_regularizer=regularizers.l2(0.00000000001),activity_regularizer=regularizers.l1(0.00000000001)))
-    #sgd = SGD(lr=0.1, decay=1e-6, momentum=1.0, nesterov=True)
+    model.add(Dense(dense,activation='sigmoid'))
+    #sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=False)
     model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy'])
     print(model.summary())
     
     return model
     #from https://www.kaggle.com/sakarilukkarinen/embedding-lstm-gru-and-conv1d/versions
 def gru_model2(input_shape,embedding_layer1,dense):
-    dense = dense-1
+
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(GRU(MAX_LEN, return_sequences = True))
-    model.add(GRU(32, activation = 'relu'))
+    model.add(GRU((MAX_LEN), return_sequences = True))
+    #model.add(SpatialDropout1D(0.15))
+    model.add(GRU((MAX_LEN), activation = 'relu'))
+    
+    
+    model.add(Dropout(0.1))
+    model.add(BatchNormalization())
+    '''
+    model.add(Dense(DIM, activation='relu'))
+    model.add(Dropout(0.00001))
+    model.add(BatchNormalization())
+    
+    model.add(Dense(MAX_LEN, activation='relu'))
     model.add(Dropout(0.0001))
-    model.add(Dense(MAX_LEN, activation='relu'))
-    model.add(Dropout(0.001))
-    model.add(Dense(MAX_LEN, activation='relu'))
-    model.add(Dropout(0.01))
+    model.add(BatchNormalization())
     model.add(Dense(32, activation='relu'))
     model.add(Dense(32, activation='relu'))
-    model.add(Dense(6, activation='relu'))
-    model.add(Dense(dense, activation = 'softmax',kernel_regularizer=regularizers.l2(0.00000000001),activity_regularizer=regularizers.l1(0.00000000001)))
-    #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
+    model.add(Dropout(0.0001))
+    model.add(Dense(12, activation='relu'))
+    model.add(Dropout(0.0001))
+    '''
+    model.add(Dense(dense, activation = 'sigmoid',kernel_regularizer=regularizers.l2(0.000000001),activity_regularizer=regularizers.l1(0.000000001)))
+    #sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=False)
     model.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
     print(model.summary())
     return model
-
 def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y_val,dense):
     callbacks = [EarlyStopping(monitor='val_loss')]
     #you can also use rmsprop as optimizer
-    adam = Adam(lr=1e-3)
-    loss = 'categorical_crossentropy'
+    #adam = Adam(lr=1e-3)
+    #kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=seed)
+    #loss = 'categorical_crossentropy'
     if model_type == 'cnn1':
         model = cnn1((input_shape,),embedding_layer,dense)
         #model.compile(loss=loss,optimizer=adam,metrics=['acc'])
-        track = model.fit(X_train, y_train, batch_size=32, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        #for train, test in kfold.split(X, Y):
+        track = model.fit(X_train, y_train, batch_size=13, epochs=10, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        '''
+        model.fit_generator(generator=batch_generator(X_train, y_train, 32),
+                    epochs=5, validation_data=(X_val, y_val),
+                    steps_per_epoch=X_train.shape[0]/32)
+        '''
         #plot_function(track)
+        '''
+        [9] https://towardsdatascience.com/another-twitter-sentiment-analysis-with-python-part-9-neural-networks-with-tfidf-vectors-using-d0b4af6be6d7
+        By Ricky Kim, Another Twitter sentiment analysis with Python — Part 9 (Neural Networks with Tfidf vectors using Keras)
+        scores = model.evaluate(X[test], Y[test], verbose=0)
+	    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
+	    cvscores.append(scores[1] * 100)
+        '''
         plot_performance(track)
     elif model_type == 'cnn2':
-        model1 = cnn2((input_shape,),embedding_layer,dense)
-        model1.compile(loss=loss,optimizer=adam,metrics=['acc'])
-        track2 = model1.fit(X_train, y_train, batch_size=128, epochs=10, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        model = cnn2((input_shape,),embedding_layer,dense)
+        #model1.compile(loss=loss,optimizer=adam,metrics=['acc'])
+        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        track = model.fit(X_train, y_train, batch_size=13, epochs=10, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        '''
+        model.fit_generator(generator=batch_generator(X_train, y_train, 32),
+                    epochs=5, validation_data=(X_val, y_val),
+                    steps_per_epoch=X_train.shape[0]/32)
+        '''
         #plot_function(track2)
-        plot_performance(track2)
-        model = model1
+        '''
+        scores = model.evaluate(X[test], Y[test], verbose=0)
+	    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
+	    cvscores.append(scores[1] * 100)
+        '''
+        plot_performance(track)
+        
     elif model_type == 'lstm':
-        LSTM_model = lstm_model((input_shape,),embedding_layer,dense)
+        model = lstm_model((input_shape,),embedding_layer,dense)
         #The model has already been compiled in the function call
-        track3 = LSTM_model.fit(X_train, y_train, epochs=40, batch_size=32,verbose=1,shuffle=True,validation_data=(X_val, y_val))
-        #plot_function(track3)
-        plot_performance(track3)
-        model = LSTM_model
+        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=True,validation_data=(X_val, y_val),callbacks=callbacks)
+        '''
+        model.fit_generator(generator=batch_generator(X_train, y_train, 32),
+                    epochs=5, validation_data=(X_val, y_val),
+                    steps_per_epoch=X_train.shape[0]/32)
+        '''
+        #plot_function(track)
+        '''
+        scores = model.evaluate(X[test], Y[test], verbose=0)
+	    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
+	    cvscores.append(scores[1] * 100)
+        '''
+        plot_performance(track)
+    elif model_type == 'bilstm':
+        model = bilstm((input_shape,),embedding_layer,dense)
+        #The model has already been compiled in the function call
+        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=True,validation_data=(X_val, y_val),callbacks=callbacks)
+        '''
+        model.fit_generator(generator=batch_generator(X_train, y_train, 32),
+                    epochs=5, validation_data=(X_val, y_val),
+                    steps_per_epoch=X_train.shape[0]/32)
+        '''
+        #plot_function(track)
+        '''
+        scores = model.evaluate(X[test], Y[test], verbose=0)
+	    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
+	    cvscores.append(scores[1] * 100)
+        '''
+        plot_performance(track)
     elif model_type == 'gru':
-        GRU_model = gru_model((input_shape,),embedding_layer,dense)
+        model = gru_model((input_shape,),embedding_layer,dense)
         #The model has already been compiled in the function call
-        track2 = GRU_model.fit(X_train, y_train, epochs=25, batch_size=128,verbose=1,shuffle=True, validation_data=(X_val, y_val),callbacks=callbacks)
-        #plot_function(track2)
-        plot_performance(track2)
-        model = GRU_model
+        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=False, validation_data=(X_val, y_val),callbacks=callbacks)
+        '''
+        model.fit_generator(generator=batch_generator(X_train, y_train, 32),
+                    epochs=5, validation_data=(X_val, y_val),
+                    steps_per_epoch=X_train.shape[0]/32)
+        '''
+        #plot_function(track)
+        '''
+        scores = model.evaluate(X[test], Y[test], verbose=0)
+	    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
+	    cvscores.append(scores[1] * 100)
+        '''
+        plot_performance(track)
+        
     else:
-        gru2 = gru_model2((input_shape,),embedding_layer,dense)
-        track2 = gru2.fit(X_train, y_train, epochs=40, batch_size=32,verbose=1,shuffle=True, validation_data=(X_val, y_val))
-        #plot_function(track2)
-        plot_performance(track2)
-        model = gru2
+        model = gru_model2((input_shape,),embedding_layer,dense)
+        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        track = model.fit(X_train, y_train, epochs=10, batch_size=13,verbose=2,shuffle=False, validation_data=(X_val, y_val),callbacks=callbacks)
+        '''
+        model.fit_generator(generator=batch_generator(X_train, y_train, 32),
+                    epochs=5, validation_data=(X_val, y_val),
+                    steps_per_epoch=X_train.shape[0]/32)
+        '''
+        #plot_function(track)
+        '''
+        scores = model.evaluate(X[test], Y[test], verbose=0)
+	    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
+	    cvscores.append(scores[1] * 100)
+        '''
+        
+        plot_performance(track)
+    #print("%.2f%% (+/- %.2f%%)" % (numpy.mean(cvscores), numpy.std(cvscores)))
     #model = None
     return model
+def batch_generator(X_data, y_data, batch_size):
+    samples_per_epoch = X_data.shape[0]
+    number_of_batches = samples_per_epoch/batch_size
+    counter=0
+    index = np.arange(np.shape(y_data)[0])
+    while 1:
+        index_batch = index[batch_size*counter:batch_size*(counter+1)]
+        X_batch = X_data[index_batch,:].toarray()
+        y_batch = y_data[y_data.index[index_batch]]
+        counter += 1
+        yield X_batch,y_batch
+        if (counter > number_of_batches):
+            counter=0
 def plot_model_performace(result):
+    
     sns.set_style("ticks")
     figsize=(22, 6)
 
@@ -1434,6 +1588,7 @@ def plot_model_performace(result):
     col1 = "model"
     col2 = "score"
     sns.barplot(x=col1, y=col2, data=result)
+
     plt.title(title.title())
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)

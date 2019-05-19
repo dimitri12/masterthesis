@@ -23,6 +23,8 @@ from sklearn.metrics import log_loss, accuracy_score
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import SVC
+import multiprocessing
+from multiprocessing import Pool
 from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
@@ -37,7 +39,7 @@ from keras.preprocessing.sequence import pad_sequences
 from keras.utils.np_utils import to_categorical
 from keras.models import Sequential
 from keras.models import Model
-from keras.layers import Dense, Embedding, LSTM, SpatialDropout1D
+from keras.layers import Dense, Embedding, LSTM, SpatialDropout1D, Activation
 from keras.utils.np_utils import to_categorical
 from keras.callbacks import ModelCheckpoint
 from keras.models import load_model
@@ -45,6 +47,7 @@ from keras.optimizers import Adam
 from keras.constraints import unit_norm
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.naive_bayes import GaussianNB
+from keras.constraints import maxnorm
 from sklearn.svm import LinearSVC
 from sklearn.ensemble import VotingClassifier
 from sklearn.ensemble import RandomForestClassifier
@@ -73,18 +76,22 @@ from gensim.models.wrappers import FastText
 import matplotlib.patches as patches
 import time
 import datetime
+import fastText
 from gensim.models import word2vec
 import warnings
 import pickle
 from sklearn.manifold import TSNE
 from collections import Counter
 import string
+import operator 
 warnings.filterwarnings(action='ignore', category=DataConversionWarning)
 warnings.filterwarnings(action='ignore', category=FutureWarning)
 warnings.filterwarnings(action='ignore')
 
+num_partitions = multiprocessing.cpu_count()
+num_cores = multiprocessing.cpu_count()
 #Global Variables from [7] and others
-NB_WORDS = 4900  # Parameter indicating the number of words we'll put in the dictionary 
+NB_WORDS = 9501  # Parameter indicating the number of words we'll put in the dictionary 
 
 VAL_SIZE = 9  # Size of the validation set (originally 1000)
 NB_START_EPOCHS = 8  # Number of epochs we usually start to train with
@@ -92,7 +99,7 @@ BATCH_SIZE = 512  # Size of the batches used in the mini-batch gradient descent
 MAX_LEN = 72  # Maximum number of words in a sequence
 #MAX_LEN = 62
 GLOVE_DIM = 50  # Number of dimensions of the GloVe word embeddings
-MAX_SEQUENCE_LENGTH = 463
+MAX_SEQUENCE_LENGTH = 456
 MAX_NB_WORDS = 20000
 EMBEDDING_DIM = 100
 VALIDATION_SPLIT = 0.1
@@ -113,6 +120,7 @@ kernel_size = 5
 filters = 64
 pool_size = 4
 lstm_output_size = 70
+#model2 = fastText.train_supervised('./fasttext_train.txt',label='label_', epoch=20, dim=200)
 
 def cleaning(s):
     s = str(s)
@@ -127,6 +135,7 @@ def cleaning(s):
     s = s.replace("https","")
     s = s.replace(",","")
     s = s.replace("[\w*"," ")
+    
     return s
 def clean_text(txt):
     txt = "".join(v for v in txt if v not in string.punctuation).lower()
@@ -847,6 +856,33 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     #input_data = input_data.apply(remove_stopwords)
     
     data = feature_engineering(input_data, output_data)
+    '''
+    global model2
+    resmod2 = [None] * input_data.shape[0]
+    #print(np.array(input_data)[0])
+    for i in range(input_data.shape[0]):
+        resmod = model2.predict(np.array(input_data)[i])
+        print(resmod[0])
+        lst = list(resmod)
+        if lst[0] == "('label_1',)":
+            lst[0] = 1
+        else:
+            lst[0] = 0
+        
+        resmod2.append(tuple(lst))
+    print(resmod2)
+    resmod = [value for x in resmod2 for value in x and value is not None]
+    resmod = np.array(resmod2)
+    '''
+
+
+    print("Train set has total {0} entries with {1:.2f}% 0, {2:.2f}% 1".format(len(data[0]),
+                                                                             (len(data[0][data[2] == 0]) / (len(data[0])*1.))*100,
+                                                                        (len(data[0][data[2] == 1]) / (len(data[0])*1.))*100))
+    print("Test set has total {0} entries with {1:.2f}% 0, {2:.2f}% 1".format(len(data[1]),
+                                                                             (len(data[1][data[3] == 0]) / (len(data[1])*1.))*100,
+                                                                            (len(data[1][data[3] == 1]) / (len(data[1])*1.))*100))
+    
     data_out = we_output_data_transform(data[2],data[3])
     '''
     if category == None:
@@ -874,13 +910,14 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     
     print(data_in1[2])
     data_in2 = padding(data_in1[0], data_in1[1],input_data)
+    global MAX_SEQUENCE_LENGTH
+    MAX_SEQUENCE_LENGTH = data_in2[0].shape[1]
     '''
     data_in21 = vectorize_sequences(input_data)
     '''
     
     #create validation data 
     data2 = feature_engineering(data_in2[0], data_out[0])
-    print(data2[0].shape)
     #data2[0] = X_val
     #data2[2] = y_val
     assert data2[1].shape[0] == data2[3].shape[0]
@@ -903,10 +940,23 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     corpus = load_vectors2('./data/fasttext/sv.vec')
     #data_train = sentences_to_indices(data[0],corpus[1],len(data_in1[2]))
     #data_test = sentences_to_indices(data[1],corpus[1],len(data_in1[2]))
-
-    embedding_layer1 = pretrained_embedding_layer(corpus[0], corpus[1])
+    '''
+    wiki_news = './cc.sv.300.vec'
+    embed_fasttext = load_embed(wiki_news)
+    #step1 build vocab
+    vocab = build_vocab(input_data)
+    #vocab is your embedding matrix
+    #step2 check coverage
+    print("FastText : ")
+    oov_fasttext = check_coverage(vocab, embed_fasttext)
+    print(oov_fasttext[:18])
+    '''
+    vocab = None
+    embedding_layer1 = pretrained_embedding_layer(corpus[0], corpus[1],vocab)
     print(corpus[4])
+    
     embedding_layer0=load_vectors_word2vec('./data/word2vec/sv.bin',data_in1[2])
+    
     embedding_layer = [embedding_layer0,embedding_layer1]
     #second preprocessing method
     #change data_in2[0].shape[1] with (MAX_LEN,)
@@ -952,9 +1002,6 @@ def we_evaluation(data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     preds2 = model1.predict(data3[1],batch_size=13)
     preds1 = np.argmax(preds1, axis=-1)
     preds2 = np.argmax(preds2, axis=-1)
-    print(datax[3])
-    print('#'*200)
-    print(datay[3])
     with open('preds1.pickle', 'wb') as handle:
         pickle.dump(preds1, handle, protocol=pickle.HIGHEST_PROTOCOL)
     
@@ -1015,6 +1062,11 @@ def we_evaluation(data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     print('-'*200)
     df2=pd.DataFrame({'Actual':test_data2, 'Predicted':preds2})
     print(df2)
+    print('-'*200)
+    print('\nPrediction Confusion Matrix:')
+    print('-'*200)
+    cm = metrics.confusion_matrix(y_true=test_data1, y_pred=preds1)
+    print(cm)
     df1.to_csv('prediction1.csv', encoding='utf-8', index=True)
     df2.to_csv('prediction2.csv', encoding='utf-8', index=True)
 def sentences_to_indices(X, word_to_index, maxLen):
@@ -1049,6 +1101,11 @@ def plot_function(track):
     plt.legend(['train'], loc='upper left')
     plt.show()
 #tokenizes the words
+def tokenizer2(train_data, test_data):
+    train = fastText.tokenize(train_data)
+    test = fastText.tokenize(test_data)
+    result = [train,test]
+    return result
 def tokenizer(input_data,train_data, test_data):
     #from [7]
     seq_lengths = input_data.apply(lambda x: len(x.split(' ')))
@@ -1063,7 +1120,7 @@ def tokenizer(input_data,train_data, test_data):
     trained_seq = tk.texts_to_sequences(train_data)
     test_seq = tk.texts_to_sequences(test_data)
     word_index = tk.word_index
-    result = [trained_seq, test_seq, word_index]
+    result = [trained_seq, np.array(test_seq), word_index]
     return result
 def one_hot_seq(seqs, nb_features = NB_WORDS):
     ohs = np.zeros((len(seqs), nb_features))
@@ -1137,10 +1194,21 @@ def padding(trained_seq, test_seq,input):
     
     trained_seq_trunc = pad_sequences(trained_seq,maxlen=MAX_LEN)
     
-    test_seq_trunc = pad_sequences(test_seq,maxlen=MAX_LEN)
+    test_seq_trunc = pad_sequences(test_seq)
+    print(trained_seq_trunc.shape)
+    print(test_seq_trunc.shape)
     result = [trained_seq_trunc, test_seq_trunc]
     return result
-
+def load_embed(file):
+    def get_coefs(word,*arr): 
+        return word, np.asarray(arr, dtype='float32')
+    
+    if file == './cc.sv.300.vec':
+        embeddings_index = dict(get_coefs(*o.split(" ")) for o in open(file) if len(o)>100)
+    else:
+        embeddings_index = dict(get_coefs(*o.split(" ")) for o in open(file, encoding='latin'))
+        
+    return embeddings_index
 def we_output_data_transform(y_train,y_test,encoding='binary',category=None):
     if encoding == 'multi':
         '''
@@ -1241,7 +1309,6 @@ def load_vectors2(fname):
     result = [word_to_vec_map, words_to_index, index_to_words, vocab_size, dim]
     return result
 #from[8]
-
 #for Word2Vec input word2vec .bin file and word_index = tokenizer.word_index from tokenizer
 def load_vectors_word2vec(fname,word_index):
     word_vectors = KeyedVectors.load(fname)
@@ -1250,7 +1317,7 @@ def load_vectors_word2vec(fname,word_index):
     embedding_matrix = np.zeros((vocabulary_size, EMBEDDING_DIM))
     
     for word, i in word_index.items():
-        if i>=MAX_NB_WORDS:
+        if i>=NB_WORDS:
             continue
         try:
             embedding_vector = word_vectors[word]
@@ -1258,11 +1325,47 @@ def load_vectors_word2vec(fname,word_index):
         except KeyError:
             embedding_matrix[i]=np.random.normal(0,np.sqrt(0.25),EMBEDDING_DIM)
     del(word_vectors)
-    embedding_layer = Embedding(vocabulary_size,EMBEDDING_DIM,weights=[embedding_matrix],trainable=True,input_length = MAX_LEN)
+    embedding_layer = Embedding(NB_WORDS,EMBEDDING_DIM,weights=[embedding_matrix])
     embedding_layer.build(MAX_LEN)
     return embedding_layer
+def build_vocab(texts):
+    sentences = texts.apply(lambda x: x.split()).values
+    vocab = {}
+    for sentence in sentences:
+        for word in sentence:
+            try:
+                vocab[word] += 1
+            except KeyError:
+                vocab[word] = 1
+    return vocab
+def check_coverage(vocab, embeddings_index):
+    known_words = {}
+    unknown_words = {}
+    nb_known_words = 0
+    nb_unknown_words = 0
+    for word in vocab.keys():
+        try:
+            known_words[word] = embeddings_index[word]
+            nb_known_words += vocab[word]
+        except:
+            unknown_words[word] = vocab[word]
+            nb_unknown_words += vocab[word]
+            pass
+
+    print('Found embeddings for {:.2%} of vocab'.format(len(known_words) / len(vocab)))
+    print('Found embeddings for  {:.2%} of all text'.format(nb_known_words / (nb_known_words + nb_unknown_words)))
+    unknown_words = sorted(unknown_words.items(), key=operator.itemgetter(1))[::-1]
+
+    return unknown_words
+def add_lower(embedding, vocab):
+    count = 0
+    for word in vocab:
+        if word in embedding and word.lower() not in embedding:  
+            embedding[word.lower()] = embedding[word]
+            count += 1
+    print(f"Added {count} words to embedding")
 #[8]
-def pretrained_embedding_layer(word_to_vec_map, word_to_index):
+def pretrained_embedding_layer(word_to_vec_map, word_to_index,embeddings_index):
     vocab_len = len(word_to_index) + 1
     #emb_dim = word_to_vec_map["cucumber"].shape[0]
     emb_dim = 300
@@ -1274,8 +1377,13 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index):
     
     for word, index in word_to_index.items():
         emb_matrix[index, :] = word_to_vec_map[word]
-
-    embedding_layer = Embedding(input_dim = vocab_len, output_dim = emb_dim, trainable = True,input_length = MAX_LEN) 
+        '''
+        if index >= NB_WORDS: continue
+        embedding_vector = embeddings_index.get(word)
+        if embedding_vector is not None: emb_matrix[index] = embedding_vector
+        '''
+    embedding_layer = Embedding(input_dim = vocab_len, output_dim = emb_dim,
+    mask_zero = False,input_length = MAX_SEQUENCE_LENGTH) 
 
     embedding_layer.build(MAX_LEN)
     embedding_layer.set_weights([emb_matrix])
@@ -1307,63 +1415,66 @@ def cnn2(input_shape,embedding_layer1,dense):
     
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(Dropout(0.25))
     model.add(Conv1D(filters, kernel_size, padding='valid', activation='relu', strides=1))
     model.add(MaxPooling1D(pool_size=pool_size))
-    model.add(LSTM(MAX_LEN, return_sequences = True))
-    model.add(GRU(MAX_LEN))
+    model.add(LSTM(32, return_sequences = True))
+    model.add(BatchNormalization())
+    model.add(Activation('relu'))
+    model.add(GRU(32))
+    model.add(BatchNormalization())
     '''
     model.add(Dense(MAX_LEN, activation='relu'))
     model.add(Dense(32, activation='relu'))
-    model.add(Dense(16, activation='relu'))
-    model.add(Dense(8, activation='relu'))
-    model.add(Dense(6, activation='relu'))
+    
+    model.add(Dense(16))
+    model.add(Activation('relu'))
+    model.add(Dense(8))
+    model.add(Activation('relu'))
+    model.add(Dense(6))
+    model.add(Activation('relu'))
     '''
-    model.add(Dense(dense,activation='softmax',kernel_regularizer=regularizers.l2(0.00000000001),activity_regularizer=regularizers.l1(0.00000000001)))
-    #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
-    model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy'])
+    model.add(Dense(dense,activation='softmax'))
+    sgd = SGD(lr=0.01, decay=1e-6, momentum=1.0, nesterov=True)
+    model.compile(loss = 'categorical_crossentropy', optimizer=sgd,metrics = ['accuracy'])
     print(model.summary())
     return model
 def cnn1(input_shape,embedding_layer1,dense):
     
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(Dropout(0.1))
     model.add(Conv1D(filters, kernel_size, padding='valid', activation='relu', strides=1))
     model.add(MaxPooling1D(pool_size=pool_size))
-    model.add(LSTM(MAX_LEN))
+    model.add(LSTM(lstm_out))
+    model.add(BatchNormalization())
+    model.add(Activation('relu'))
     '''
     model.add(Dense(MAX_LEN, activation='relu'))
     model.add(Dense(32, activation='relu'))
-    model.add(Dense(16, activation='relu'))
-    model.add(Dense(8, activation='relu'))
-    model.add(Dense(6, activation='relu'))
+    
+    model.add(Dense(16))
+    model.add(Activation('relu'))
+    model.add(Dense(8))
+    model.add(Activation('relu'))
+    model.add(Dense(6))
+    model.add(Activation('relu'))
     '''
     model.add(Dense(dense,activation='softmax',kernel_regularizer=regularizers.l1(0.01),activity_regularizer=regularizers.l2(0.01)))
-    #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
-    model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy'])
+    sgd = SGD(lr=0.01, decay=1e-6, momentum=1.0, nesterov=True)
+    model.compile(loss = 'categorical_crossentropy', optimizer=sgd,metrics = ['accuracy'])
     print(model.summary())
     return model
 def gru_model(input_shape,embedding_layer1,dense):
     
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(BatchNormalization())
-    model.add(GRU(32,activation='relu'))
-    #model.add(Dropout(0.2))
+    model.add(SpatialDropout1D(0.0001))
     
-    #model.add(Dense(4, activation='relu',input_dim=MAX_LEN))
-    
+    model.add(GRU(128,kernel_initializer='normal',dropout=0.01,recurrent_dropout=0.01,activation='relu',use_bias=True))
     model.add(BatchNormalization())
-    '''
-    #model.add(Dropout(0.5))
-    model.add(Dense(3, activation='relu'))
-    model.add(BatchNormalization())
-    '''
-    model.add(Dense(dense, activation='sigmoid'))
-    #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
-    
-    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.add(Dense(dense, use_bias=True, activation='softmax',kernel_regularizer=regularizers.l2(0.001),activity_regularizer=regularizers.l1(0.001),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
+    adam = Adam(lr=0.3,epsilon=0.05,amsgrad=True,decay=0)
+    model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy'])
     print(model.summary())
     
     return model
@@ -1371,35 +1482,13 @@ def lstm_model(input_shape,embedding_layer1,dense):
     
     model = Sequential()
     model.add(embedding_layer1)
-    #model.add(SpatialDropout1D(0.1))
+    model.add(SpatialDropout1D(0.0001))
+    model.add(LSTM(200,kernel_initializer='normal',dropout=0.01,recurrent_dropout=0.01,activation='relu',recurrent_activation='sigmoid',use_bias=True))
     model.add(BatchNormalization())
-    model.add(LSTM(32,activation='relu'))
-    '''
-    #model.add(Dropout(0.5))
-    #model.add(BatchNormalization())
-    
-    model.add(Dense(32, activation='relu',input_dim=MAX_LEN))
-    model.add(Dropout(0.1))
-    model.add(Dense(3, activation='relu',input_dim=MAX_LEN))
-    model.add(Dropout(0.1))
-    model.add(Dense(2, activation='relu'))
-    model.add(BatchNormalization())
-    
-    
-    #model.add(BatchNormalization())
-    
-    
-    #model.add(BatchNormalization())
-    
-    
-    model.add(Dropout(0.0001))
-    model.add(Dense(12, activation='relu'))
-    model.add(Dropout(0.0001))
-    '''
-    #,kernel_regularizer=regularizers.l2(0.01),activity_regularizer=regularizers.l1(0.00000000001)
-    model.add(Dense(dense,activation='sigmoid'))
-    #sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=False)
-    model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy'])
+    model.add(Dense(dense, use_bias=True,activation='softmax',kernel_regularizer=regularizers.l2(0.001),activity_regularizer=regularizers.l1(0.001),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
+    adam = Adam(lr=0.3,epsilon=0.08,amsgrad=True,decay=0)
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy'])
     print(model.summary())
     
     return model
@@ -1409,7 +1498,6 @@ def gru_model2(input_shape,embedding_layer1,dense):
     model = Sequential()
     model.add(embedding_layer1)
     model.add(GRU((MAX_LEN), return_sequences = True))
-    #model.add(SpatialDropout1D(0.15))
     model.add(GRU((MAX_LEN), activation = 'relu'))
     
     
@@ -1435,7 +1523,7 @@ def gru_model2(input_shape,embedding_layer1,dense):
     print(model.summary())
     return model
 def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y_val,dense):
-    callbacks = [EarlyStopping(monitor='val_loss')]
+    callbacks = [EarlyStopping(monitor='val_loss',patience=2)]
     #you can also use rmsprop as optimizer
     #adam = Adam(lr=1e-3)
     #kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=seed)
@@ -1444,11 +1532,11 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         model = cnn1((input_shape,),embedding_layer,dense)
         #model.compile(loss=loss,optimizer=adam,metrics=['acc'])
         #for train, test in kfold.split(X, Y):
-        track = model.fit(X_train, y_train, batch_size=13, epochs=10, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
-        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        track = model.fit(X_train, y_train, batch_size=13, epochs=20, verbose=1,validation_data=(X_val, y_val))
+        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
         '''
         model.fit_generator(generator=batch_generator(X_train, y_train, 32),
-                    epochs=5, validation_data=(X_val, y_val),
+                    epochs=5,validation_data=(X_val, y_val),
                     steps_per_epoch=X_train.shape[0]/32)
         '''
         #plot_function(track)
@@ -1463,11 +1551,11 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
     elif model_type == 'cnn2':
         model = cnn2((input_shape,),embedding_layer,dense)
         #model1.compile(loss=loss,optimizer=adam,metrics=['acc'])
-        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
-        track = model.fit(X_train, y_train, batch_size=13, epochs=10, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
+        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
+        track = model.fit(X_train, y_train, batch_size=13, epochs=20, verbose=1,validation_data=(X_val, y_val))
         '''
         model.fit_generator(generator=batch_generator(X_train, y_train, 32),
-                    epochs=5, validation_data=(X_val, y_val),
+                    epochs=5,validation_data=(X_val, y_val),
                     steps_per_epoch=X_train.shape[0]/32)
         '''
         #plot_function(track2)
@@ -1481,11 +1569,11 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
     elif model_type == 'lstm':
         model = lstm_model((input_shape,),embedding_layer,dense)
         #The model has already been compiled in the function call
-        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
-        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=True,validation_data=(X_val, y_val),callbacks=callbacks)
+        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
+        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=False,validation_data=(X_val, y_val))
         '''
         model.fit_generator(generator=batch_generator(X_train, y_train, 32),
-                    epochs=5, validation_data=(X_val, y_val),
+                    epochs=5,validation_data=(X_val, y_val),
                     steps_per_epoch=X_train.shape[0]/32)
         '''
         #plot_function(track)
@@ -1498,11 +1586,11 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
     elif model_type == 'bilstm':
         model = bilstm((input_shape,),embedding_layer,dense)
         #The model has already been compiled in the function call
-        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
-        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=True,validation_data=(X_val, y_val),callbacks=callbacks)
+        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
+        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=False,validation_data=(X_val, y_val))
         '''
         model.fit_generator(generator=batch_generator(X_train, y_train, 32),
-                    epochs=5, validation_data=(X_val, y_val),
+                    epochs=5,validation_data=(X_val, y_val),
                     steps_per_epoch=X_train.shape[0]/32)
         '''
         #plot_function(track)
@@ -1515,11 +1603,11 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
     elif model_type == 'gru':
         model = gru_model((input_shape,),embedding_layer,dense)
         #The model has already been compiled in the function call
-        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
-        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=False, validation_data=(X_val, y_val),callbacks=callbacks)
+        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
+        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=False,validation_data=(X_val, y_val))
         '''
         model.fit_generator(generator=batch_generator(X_train, y_train, 32),
-                    epochs=5, validation_data=(X_val, y_val),
+                    epochs=5,validation_data=(X_val, y_val),
                     steps_per_epoch=X_train.shape[0]/32)
         '''
         #plot_function(track)
@@ -1532,11 +1620,11 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         
     else:
         model = gru_model2((input_shape,),embedding_layer,dense)
-        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
-        track = model.fit(X_train, y_train, epochs=10, batch_size=13,verbose=2,shuffle=False, validation_data=(X_val, y_val),callbacks=callbacks)
+        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
+        track = model.fit(X_train, y_train, epochs=10, batch_size=13,verbose=2,shuffle=False,validation_data=(X_val, y_val))
         '''
         model.fit_generator(generator=batch_generator(X_train, y_train, 32),
-                    epochs=5, validation_data=(X_val, y_val),
+                    epochs=5,validation_data=(X_val, y_val),
                     steps_per_epoch=X_train.shape[0]/32)
         '''
         #plot_function(track)
@@ -1596,6 +1684,14 @@ def plot_model_performace(result):
     plt.grid()
     plt.plot()
     plt.show()
+def parallelize_dataframe(df, func):
+    df_split = np.array_split(df, num_partitions)
+    pool = Pool(num_cores)
+    df = pd.concat(pool.map(func, df_split), ignore_index=True)
+    pool.close()
+    pool.join()
+    return df
+#to call the function above, do this: parallelize_dataframe(df, cleaning), then pickle
 '''
 [1] https://medium.com/deep-learning-turkey/text-processing-1-old-fashioned-methods-bag-of-words-and-tfxidf-b2340cc7ad4b, Medium, Deniz Kilinc visited 6th of April 2019
 [2] https://www.kaggle.com/reiinakano/basic-nlp-bag-of-words-tf-idf-word2vec-lstm, from ReiiNakano , Kaggle, visited 5th of April 2019

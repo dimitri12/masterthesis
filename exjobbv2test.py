@@ -225,7 +225,7 @@ ANNs:
 1.CNN1
 2.CNN2
 3.LSTM
-4.GRU
+4.GRU1
 5.GRU2
 6. Default
 
@@ -241,9 +241,16 @@ ANN2 = 'gru'
 #print(outputdata)
 
 
+#run.eda2(df1)
+f = open('fasttext_train.txt', 'w')
+df['hosp_ed']=df['hosp_ed'].apply(lambda row: 'label_' + str(row))
+#print(df['hosp_ed'])
 df['FreeText'] = [run.cleaning(s) for s in df['FreeText']]
+for FreeText, hosp_ed in zip(df['FreeText'], df['hosp_ed']):
+    f.write((FreeText.rstrip() + ' ' + hosp_ed + '\n'))
 input_data = df.FreeText.astype(str)
 input_data1 = df.iloc[:,1:2].FreeText.astype(str)
+
 
 test = run.word_embeddings(input_data, output_data,ANN1,2,1)
 test1 = run.word_embeddings(input_data, output_data,ANN2,2,1)

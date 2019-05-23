@@ -250,7 +250,8 @@ for FreeText, hosp_ed in zip(df['FreeText'], df['hosp_ed']):
     f.write((FreeText.rstrip() + ' ' + hosp_ed + '\n'))
 input_data = df.FreeText.astype(str)
 input_data1 = df.iloc[:,1:2].FreeText.astype(str)
-
+#run.eda2(df)
+#run.eda2(df)
 
 test = run.word_embeddings(input_data, output_data,ANN1,2,1)
 test1 = run.word_embeddings(input_data, output_data,ANN2,2,1)
@@ -258,7 +259,7 @@ test1 = run.word_embeddings(input_data, output_data,ANN2,2,1)
 run.we_evaluation(test[0],test[1],test1[0],test1[1],ANN1,ANN2,test[2],test1[2])
 '''
 #run.eda1(df)
-#run.eda2(df)
+
 df["FreeText_len"] = df["FreeText"].apply(lambda x: len(x))
 print(df['FreeText_len'].sum())
 

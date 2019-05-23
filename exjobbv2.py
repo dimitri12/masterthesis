@@ -39,7 +39,7 @@ from keras.preprocessing.sequence import pad_sequences
 from keras.utils.np_utils import to_categorical
 from keras.models import Sequential
 from keras.models import Model
-from keras.layers import Dense, Embedding, LSTM, SpatialDropout1D, Activation
+from keras.layers import Dense, Embedding, LSTM, SpatialDropout1D, Activation, LeakyReLU, PReLU, ELU, ThresholdedReLU
 from keras.utils.np_utils import to_categorical
 from keras.callbacks import ModelCheckpoint
 from keras.models import load_model
@@ -66,6 +66,7 @@ from keras.initializers import glorot_uniform
 from gensim.models.keyedvectors import KeyedVectors
 from keras.layers.core import Reshape, Flatten
 from keras.callbacks import EarlyStopping
+from keras.activations import relu
 from keras.optimizers import SGD
 from sklearn.exceptions import DataConversionWarning
 from sklearn.feature_extraction.text import TfidfTransformer
@@ -1194,7 +1195,7 @@ def padding(trained_seq, test_seq,input):
     
     trained_seq_trunc = pad_sequences(trained_seq,maxlen=MAX_LEN)
     
-    test_seq_trunc = pad_sequences(test_seq)
+    test_seq_trunc = pad_sequences(test_seq,maxlen=MAX_LEN)
     print(trained_seq_trunc.shape)
     print(test_seq_trunc.shape)
     result = [trained_seq_trunc, test_seq_trunc]
@@ -1241,8 +1242,8 @@ def we_output_data_transform(y_train,y_test,encoding='binary',category=None):
         return concated,labels
     else:
         le = LabelEncoder()
-        y_train_le = le.fit_transform(y_train)
-        y_test_le = le.fit_transform(y_test)
+        y_train_le = le.fit_transform(y_train.values)
+        y_test_le = le.fit_transform(y_test.values)
         y_train = to_categorical(y_train_le).astype('float32')
         y_test = to_categorical(y_test_le).astype('float32')
     result = [y_train,y_test]
@@ -1393,49 +1394,68 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index,embeddings_index):
 def bilstm(input_shape,embedding_layer1,dense):
     model = Sequential()
     model.add(embedding_layer1)
-    #model.add(SpatialDropout1D(0.1))
+    model.add(Bidirectional(LSTM(300,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',recurrent_activation='hard_sigmoid',use_bias=True)))
+    model.add(Dropout(0.001))
+    model.add(Dropout(0.0003))
     model.add(BatchNormalization())
-    model.add(Bidirectional(LSTM(MAX_LEN, dropout_U = 0.2, dropout_W = 0.2)))
-    '''
-    model.add(Dense(4, activation='relu',input_dim=MAX_LEN))
-    
+    model.add(Dropout(0.0003))
     model.add(BatchNormalization())
-    
-    #model.add(Dropout(0.5))
-    model.add(Dense(3, activation='relu'))
+    model.add(Dropout(0.0003))
     model.add(BatchNormalization())
-    '''
-    model.add(Dense(dense, activation='sigmoid'))
-    #sgd = SGD(lr=0.2, decay=1e-6, momentum=1.0, nesterov=True)
-    
-    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dense(600,activation='elu'))
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    #model.add(Dense(3,activation='elu'))
+    model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
+    adam = Adam(lr=0.009,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy'])
     print(model.summary())
     return model
 def cnn2(input_shape,embedding_layer1,dense):
     
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(Conv1D(filters, kernel_size, padding='valid', activation='relu', strides=1))
+    model.add(Conv1D(filters, kernel_size, padding='valid', activation='elu', strides=1))
     model.add(MaxPooling1D(pool_size=pool_size))
-    model.add(LSTM(32, return_sequences = True))
+    model.add(LSTM(300,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',recurrent_activation='hard_sigmoid',use_bias=True))
+    model.add(GRU(300))
+    model.add(Dropout(0.001))
+    model.add(Dropout(0.0003))
     model.add(BatchNormalization())
-    model.add(Activation('relu'))
-    model.add(GRU(32))
+    model.add(Dropout(0.0003))
     model.add(BatchNormalization())
-    '''
-    model.add(Dense(MAX_LEN, activation='relu'))
-    model.add(Dense(32, activation='relu'))
-    
-    model.add(Dense(16))
-    model.add(Activation('relu'))
-    model.add(Dense(8))
-    model.add(Activation('relu'))
-    model.add(Dense(6))
-    model.add(Activation('relu'))
-    '''
-    model.add(Dense(dense,activation='softmax'))
-    sgd = SGD(lr=0.01, decay=1e-6, momentum=1.0, nesterov=True)
-    model.compile(loss = 'categorical_crossentropy', optimizer=sgd,metrics = ['accuracy'])
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dense(512,activation='elu'))
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(Dense(3,activation='elu'))
+    model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
+    adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy'])
     print(model.summary())
     return model
 def cnn1(input_shape,embedding_layer1,dense):
@@ -1444,36 +1464,69 @@ def cnn1(input_shape,embedding_layer1,dense):
     model.add(embedding_layer1)
     model.add(Conv1D(filters, kernel_size, padding='valid', activation='relu', strides=1))
     model.add(MaxPooling1D(pool_size=pool_size))
-    model.add(LSTM(lstm_out))
+    model.add(LSTM(300,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',recurrent_activation='hard_sigmoid',use_bias=True))
+    model.add(Dropout(0.001))
+    model.add(Dropout(0.0003))
     model.add(BatchNormalization())
-    model.add(Activation('relu'))
-    '''
-    model.add(Dense(MAX_LEN, activation='relu'))
-    model.add(Dense(32, activation='relu'))
-    
-    model.add(Dense(16))
-    model.add(Activation('relu'))
-    model.add(Dense(8))
-    model.add(Activation('relu'))
-    model.add(Dense(6))
-    model.add(Activation('relu'))
-    '''
-    model.add(Dense(dense,activation='softmax',kernel_regularizer=regularizers.l1(0.01),activity_regularizer=regularizers.l2(0.01)))
-    sgd = SGD(lr=0.01, decay=1e-6, momentum=1.0, nesterov=True)
-    model.compile(loss = 'categorical_crossentropy', optimizer=sgd,metrics = ['accuracy'])
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dense(512,activation='elu'))
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(Dense(3,activation='elu'))
+    model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
+    adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy'])
     print(model.summary())
     return model
 def gru_model(input_shape,embedding_layer1,dense):
     
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(SpatialDropout1D(0.0001))
-    
-    model.add(GRU(128,kernel_initializer='normal',dropout=0.01,recurrent_dropout=0.01,activation='relu',use_bias=True))
+    model.add(Dropout(0.0009))
     model.add(BatchNormalization())
-    model.add(Dense(dense, use_bias=True, activation='softmax',kernel_regularizer=regularizers.l2(0.001),activity_regularizer=regularizers.l1(0.001),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    model.add(Dropout(0.0009))
+    model.add(BatchNormalization())
+    model.add(GRU(117,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',use_bias=True))
+    model.add(Dropout(0.001))
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dense(234,activation='elu',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(Dense(3,activation='elu',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    model.add(Dense(dense, use_bias=False, activation='softmax',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
-    adam = Adam(lr=0.3,epsilon=0.05,amsgrad=True,decay=0)
+    adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
     model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy'])
     print(model.summary())
     
@@ -1482,12 +1535,36 @@ def lstm_model(input_shape,embedding_layer1,dense):
     
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(SpatialDropout1D(0.0001))
-    model.add(LSTM(200,kernel_initializer='normal',dropout=0.01,recurrent_dropout=0.01,activation='relu',recurrent_activation='sigmoid',use_bias=True))
+    model.add(Dropout(0.0008))
     model.add(BatchNormalization())
-    model.add(Dense(dense, use_bias=True,activation='softmax',kernel_regularizer=regularizers.l2(0.001),activity_regularizer=regularizers.l1(0.001),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    model.add(Dropout(0.0008))
+    model.add(BatchNormalization())
+    model.add(LSTM(117,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',recurrent_activation='hard_sigmoid',use_bias=True))
+    model.add(Dropout(0.001))
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dense(234,activation='elu',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(Dense(3,activation='elu'))
+    model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
-    adam = Adam(lr=0.3,epsilon=0.08,amsgrad=True,decay=0)
+    adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
     model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy'])
     print(model.summary())
     
@@ -1497,29 +1574,34 @@ def gru_model2(input_shape,embedding_layer1,dense):
 
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(GRU((MAX_LEN), return_sequences = True))
-    model.add(GRU((MAX_LEN), activation = 'relu'))
-    
-    
-    model.add(Dropout(0.1))
+    model.add(GRU(lstm_out,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',use_bias=True,return_sequences=True))
+    model.add(GRU(MAX_LEN,activation='relu'))
+    model.add(Dropout(0.001))
+    model.add(Dropout(0.0003))
     model.add(BatchNormalization())
-    '''
-    model.add(Dense(DIM, activation='relu'))
-    model.add(Dropout(0.00001))
+    model.add(Dropout(0.0003))
     model.add(BatchNormalization())
-    
-    model.add(Dense(MAX_LEN, activation='relu'))
-    model.add(Dropout(0.0001))
+    model.add(Dropout(0.0003))
     model.add(BatchNormalization())
-    model.add(Dense(32, activation='relu'))
-    model.add(Dense(32, activation='relu'))
-    model.add(Dropout(0.0001))
-    model.add(Dense(12, activation='relu'))
-    model.add(Dropout(0.0001))
-    '''
-    model.add(Dense(dense, activation = 'sigmoid',kernel_regularizer=regularizers.l2(0.000000001),activity_regularizer=regularizers.l1(0.000000001)))
-    #sgd = SGD(lr=0.1, decay=1e-6, momentum=0.9, nesterov=False)
-    model.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = ['accuracy'])
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dense(lstm_out,activation='elu'))
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(BatchNormalization())
+    model.add(Dropout(0.0003))
+    model.add(Dense(3,activation='elu'))
+    model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
+    adam = Adam(lr=0.009,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy'])
     print(model.summary())
     return model
 def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y_val,dense):
@@ -1565,7 +1647,6 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
 	    cvscores.append(scores[1] * 100)
         '''
         plot_performance(track)
-        
     elif model_type == 'lstm':
         model = lstm_model((input_shape,),embedding_layer,dense)
         #The model has already been compiled in the function call
@@ -1621,7 +1702,7 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
     else:
         model = gru_model2((input_shape,),embedding_layer,dense)
         #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
-        track = model.fit(X_train, y_train, epochs=10, batch_size=13,verbose=2,shuffle=False,validation_data=(X_val, y_val))
+        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=False,validation_data=(X_val, y_val))
         '''
         model.fit_generator(generator=batch_generator(X_train, y_train, 32),
                     epochs=5,validation_data=(X_val, y_val),

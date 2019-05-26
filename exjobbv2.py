@@ -29,6 +29,7 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 import gensim
+import keras.backend as K
 import nltk
 from nltk.corpus import stopwords
 import scikitplot.plotters as skplt
@@ -40,7 +41,7 @@ from keras.utils.np_utils import to_categorical
 from keras.models import Sequential
 from keras.models import Model
 from keras.layers import Dense, Embedding, LSTM, SpatialDropout1D, Activation, LeakyReLU, PReLU, ELU, ThresholdedReLU
-from keras.utils.np_utils import to_categorical
+from keras.utils import to_categorical
 from keras.callbacks import ModelCheckpoint
 from keras.models import load_model
 from keras.optimizers import Adam
@@ -971,15 +972,13 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     elapsed_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
     print("\nElapsed Time: " + elapsed_time)
     print("Completed Model Trainning", date_time(1))
-    with open('model'+ANN+'.pickle', 'wb') as handle:
-        pickle.dump(model, handle, protocol=pickle.HIGHEST_PROTOCOL)
     '''
     with open('model'+ANN+'.pickle', 'rb') as handle:
         model = pickle.load(handle)
     '''
     #data_in2[0] = X_train
     #data[2] = y_train
-    return [data_in2, data2, data]
+    return [data_in2, data2, data,model]
 def vectorize_sequences(sequences, dimension=4900):
     results = np.zeros((len(sequences), dimension))
     for i, sequence in enumerate(sequences):
@@ -993,12 +992,8 @@ def multivectorization(concated):
     X = pad_sequences(sequences, maxlen=MAX_LEN)
     result = [X,word_index]
     return result
-def we_evaluation(data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
+def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     
-    with open('model'+ANN1+'.pickle', 'rb') as handle:
-        model = pickle.load(handle)
-    with open('model'+ANN2+'.pickle', 'rb') as handle:
-        model1 = pickle.load(handle)
     preds1 = model.predict(data1[1],batch_size=13)
     preds2 = model1.predict(data3[1],batch_size=13)
     preds1 = np.argmax(preds1, axis=-1)
@@ -1024,15 +1019,16 @@ def we_evaluation(data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
   
     test1 = ANN1
     test2 = ANN2
- 
-    accuracy1 = model.evaluate(data2[1], data2[3], verbose=0)
-    print("Model Performance of model 1: "+ test1 +" (Test Accuracy):")
-    print('Accuracy: {:0.2f}%\nLoss: {:0.3f}\n'.format(accuracy1[1]*100, accuracy1[1]))
-    accuracy2 = model1.evaluate(data4[1], data4[3], verbose=0)
-    print("Model Performance of model 2: "+ test2 +" (Test Accuracy):")
-    print('Accuracy: {:0.2f}%\nLoss: {:0.3f}\n'.format(accuracy2[1]*100, accuracy2[1]))
     
-    
+    #keras evaluation
+    score = model.evaluate(data2[1], data2[3], verbose=0)
+    print("Model Performance of model 1: "+ test1 +" (Test):")
+    df_score1=pd.DataFrame.from_records([{'Accuracy':score[1],'Precision':score[2],'Recall':score[3],'F1_score':score[4]}])
+    print(df_score1)
+    score = model1.evaluate(data4[1], data4[3], verbose=0)
+    print("Model Performance of model 2: "+ test2 +" (Test):")
+    df_score2=pd.DataFrame.from_records([{'Accuracy':score[1],'Precision':score[2],'Recall':score[3],'F1_score':score[4]}])
+    print(df_score2)
     '''
     result1 = pd.DataFrame({'model': test1, 'score': accuracy1[1]*100}, index=[-1])
     result2 = pd.DataFrame({'model': test2, 'score': accuracy2[1]*100}, index=[-1])
@@ -1056,6 +1052,10 @@ def we_evaluation(data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     test_data1 = pd.Series(test_data1)
     test_data2 = pd.Series(test_data2)
     '''
+    
+    #SKLearn Evaluation
+    target_class = ['class_0','class_1']
+    labels = [0,1]
     print("Results from prediction:")
     print('-'*200)
     df1=pd.DataFrame({'Actual':test_data1, 'Predicted':preds1})
@@ -1064,10 +1064,17 @@ def we_evaluation(data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     df2=pd.DataFrame({'Actual':test_data2, 'Predicted':preds2})
     print(df2)
     print('-'*200)
+    print(metrics.classification_report(test_data1,preds1,labels,target_class))
+    print('-'*200)
+    print('-'*200)
+    print(metrics.classification_report(test_data2,preds2,labels,target_class))
+    print('-'*200)
     print('\nPrediction Confusion Matrix:')
     print('-'*200)
-    cm = metrics.confusion_matrix(y_true=test_data1, y_pred=preds1)
-    print(cm)
+    cm1 = metrics.confusion_matrix(y_true=test_data1, y_pred=preds1)
+    print(cm1)
+    cm2 = metrics.confusion_matrix(y_true=test_data2, y_pred=preds2)
+    print(cm2)
     df1.to_csv('prediction1.csv', encoding='utf-8', index=True)
     df2.to_csv('prediction2.csv', encoding='utf-8', index=True)
 def sentences_to_indices(X, word_to_index, maxLen):
@@ -1147,22 +1154,22 @@ def plot_performance(history=None, figure_directory=None, ylim_pad=[0, 0]):
     xlabel = 'Epoch'
     legends = ['Training', 'Validation']
 
-    plt.figure(figsize=(20, 5))
+    plt.figure(figsize=(20, 10))
 
-    y1 = history.history['acc']
-    y2 = history.history['val_acc']
+    y1 = history.history['f1_score']
+    y2 = history.history['val_f1_score']
 
     min_y = min(min(y1), min(y2))-ylim_pad[0]
     max_y = max(max(y1), max(y2))+ylim_pad[0]
 
-    plt.subplot(121)
+    plt.subplot(221)
 
     plt.plot(y1)
     plt.plot(y2)
 
-    plt.title('Model Accuracy\n'+date_time(1), fontsize=17)
+    plt.title('Model F1_score\n'+date_time(1), fontsize=17)
     plt.xlabel(xlabel, fontsize=15)
-    plt.ylabel('Accuracy', fontsize=15)
+    plt.ylabel('F1_score', fontsize=15)
     plt.ylim(min_y, max_y)
     plt.legend(legends, loc='upper left')
     plt.grid()
@@ -1174,7 +1181,7 @@ def plot_performance(history=None, figure_directory=None, ylim_pad=[0, 0]):
     max_y = max(max(y1), max(y2))+ylim_pad[1]
 
 
-    plt.subplot(122)
+    plt.subplot(222)
 
     plt.plot(y1)
     plt.plot(y2)
@@ -1182,6 +1189,44 @@ def plot_performance(history=None, figure_directory=None, ylim_pad=[0, 0]):
     plt.title('Model Loss\n'+date_time(1), fontsize=17)
     plt.xlabel(xlabel, fontsize=15)
     plt.ylabel('Loss', fontsize=15)
+    plt.ylim(min_y, max_y)
+    plt.legend(legends, loc='upper left')
+    plt.grid()
+
+    y1 = history.history['precision']
+    y2 = history.history['val_precision']
+
+    min_y = min(min(y1), min(y2))-ylim_pad[1]
+    max_y = max(max(y1), max(y2))+ylim_pad[1]
+
+
+    plt.subplot(223)
+
+    plt.plot(y1)
+    plt.plot(y2)
+
+    plt.title('Model Precision\n'+date_time(1), fontsize=17)
+    plt.xlabel(xlabel, fontsize=15)
+    plt.ylabel('Precision', fontsize=15)
+    plt.ylim(min_y, max_y)
+    plt.legend(legends, loc='upper left')
+    plt.grid()
+
+    y1 = history.history['recall']
+    y2 = history.history['val_recall']
+
+    min_y = min(min(y1), min(y2))-ylim_pad[1]
+    max_y = max(max(y1), max(y2))+ylim_pad[1]
+
+
+    plt.subplot(224)
+
+    plt.plot(y1)
+    plt.plot(y2)
+
+    plt.title('Model Recall\n'+date_time(1), fontsize=17)
+    plt.xlabel(xlabel, fontsize=15)
+    plt.ylabel('Recall', fontsize=15)
     plt.ylim(min_y, max_y)
     plt.legend(legends, loc='upper left')
     plt.grid()
@@ -1242,10 +1287,10 @@ def we_output_data_transform(y_train,y_test,encoding='binary',category=None):
         return concated,labels
     else:
         le = LabelEncoder()
-        y_train_le = le.fit_transform(y_train.values)
-        y_test_le = le.fit_transform(y_test.values)
-        y_train = to_categorical(y_train_le).astype('float32')
-        y_test = to_categorical(y_test_le).astype('float32')
+        #y_train_le = le.fit_transform(y_train.values)
+        #y_test_le = le.fit_transform(y_test.values)
+        y_train = to_categorical(y_train.values).astype('float32')
+        y_test = to_categorical(y_test.values).astype('float32')
     result = [y_train,y_test]
     return result
 #embeddings layer
@@ -1419,7 +1464,7 @@ def bilstm(input_shape,embedding_layer1,dense):
     model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     adam = Adam(lr=0.009,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy'])
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy','precision','recall'])
     print(model.summary())
     return model
 def cnn2(input_shape,embedding_layer1,dense):
@@ -1455,7 +1500,7 @@ def cnn2(input_shape,embedding_layer1,dense):
     model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy'])
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy','precision','recall'])
     print(model.summary())
     return model
 def cnn1(input_shape,embedding_layer1,dense):
@@ -1490,44 +1535,20 @@ def cnn1(input_shape,embedding_layer1,dense):
     model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy'])
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy','precision','recall'])
     print(model.summary())
     return model
 def gru_model(input_shape,embedding_layer1,dense):
     
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(Dropout(0.0009))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0009))
-    model.add(BatchNormalization())
-    model.add(GRU(117,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',use_bias=True))
-    model.add(Dropout(0.001))
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dense(234,activation='elu',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(Dense(3,activation='elu',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
-    model.add(Dense(dense, use_bias=False, activation='softmax',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    model.add(GRU(117))
+    #model.add(Dense(234))
+    #model.add(Dense(3))
+    model.add(Dense(dense))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
-    adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy'])
+    #adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics = ['accuracy',precision,recall,f1_score])
     print(model.summary())
     
     return model
@@ -1535,37 +1556,13 @@ def lstm_model(input_shape,embedding_layer1,dense):
     
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(Dropout(0.0008))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0008))
-    model.add(BatchNormalization())
-    model.add(LSTM(117,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',recurrent_activation='hard_sigmoid',use_bias=True))
-    model.add(Dropout(0.001))
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dense(234,activation='elu',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(Dense(3,activation='elu'))
-    model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    model.add(LSTM(117))
+    #model.add(Dense(234,activation='elu',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    #model.add(Dense(3,activation='elu'))
+    model.add(Dense(dense))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
-    adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy'])
+    #adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'categorical_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score])
     print(model.summary())
     
     return model
@@ -1601,7 +1598,7 @@ def gru_model2(input_shape,embedding_layer1,dense):
     model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     adam = Adam(lr=0.009,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy'])
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy','precision','recall'])
     print(model.summary())
     return model
 def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y_val,dense):
@@ -1773,6 +1770,60 @@ def parallelize_dataframe(df, func):
     pool.join()
     return df
 #to call the function above, do this: parallelize_dataframe(df, cleaning), then pickle
+#from https://stackoverflow.com/questions/43547402/how-to-calculate-f1-macro-in-keras, visited 26th may
+def f1_score(y_true, y_pred):
+    def recall(y_true, y_pred):
+        """Recall metric.
+
+        Only computes a batch-wise average of recall.
+
+        Computes the recall, a metric for multi-label classification of
+        how many relevant items are selected.
+        """
+        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+        recall = true_positives / (possible_positives + K.epsilon())
+        return recall
+
+    def precision(y_true, y_pred):
+        """Precision metric.
+
+        Only computes a batch-wise average of precision.
+
+        Computes the precision, a metric for multi-label classification of
+        how many selected items are relevant.
+        """
+        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+        precision = true_positives / (predicted_positives + K.epsilon())
+        return precision
+    precision = precision(y_true, y_pred)
+    recall = recall(y_true, y_pred)
+    return 2*((precision*recall)/(precision+recall+K.epsilon()))
+def recall(y_true, y_pred):
+    """Recall metric.
+
+    Only computes a batch-wise average of recall.
+
+    Computes the recall, a metric for multi-label classification of
+    how many relevant items are selected.
+    """
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+    recall = true_positives / (possible_positives + K.epsilon())
+    return recall
+def precision(y_true, y_pred):
+    """Precision metric.
+
+    Only computes a batch-wise average of precision.
+
+    Computes the precision, a metric for multi-label classification of
+    how many selected items are relevant.
+    """
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+    precision = true_positives / (predicted_positives + K.epsilon())
+    return precision
 '''
 [1] https://medium.com/deep-learning-turkey/text-processing-1-old-fashioned-methods-bag-of-words-and-tfxidf-b2340cc7ad4b, Medium, Deniz Kilinc visited 6th of April 2019
 [2] https://www.kaggle.com/reiinakano/basic-nlp-bag-of-words-tf-idf-word2vec-lstm, from ReiiNakano , Kaggle, visited 5th of April 2019

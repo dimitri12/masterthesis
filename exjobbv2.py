@@ -680,15 +680,19 @@ def train_predict_model(classifier,X_train,X_test, y_train, y_test,multiclass):
     model.fit(X_train, y_train)
     # predict using model
     predicted = model.predict(X_test)
-    pred_prob = model.predict_proba(X_test)
+    if (classifier != 'SVM' or classifier != 'ensemble'):
+        pred_prob = model.predict_proba(X_test)[:,1]
+        #pred_prob = None
+    else:
+        pred_prob = None
     acc = metrics.accuracy_score(y_test,predicted)
     acc = acc*100
-    if classifier == 'None':
+    if classifier == None:
         loss = log_loss(y_test,predicted)
-        result = [predicted,acc,loss,pred_prob[:,1]]
+        result = [predicted,acc,loss,pred_prob]
     else:
     
-        result = [predicted,acc,pred_prob[:,1]]
+        result = [predicted,acc,pred_prob]
     return result    
 def initiate_predictions(train_test_data,method,multiclass):
     X_train = train_test_data[0]
@@ -708,6 +712,23 @@ def initiate_predictions(train_test_data,method,multiclass):
     else:
         result = [true,predicted,acc,pred_prob]
     return result
+def plot_cm(cm):
+    
+    plt.clf()
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
+    classNames = ['Negative','Positive']
+    plt.title('Result')
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    tick_marks = np.arange(len(classNames))
+    plt.xticks(tick_marks, classNames, rotation=45)
+    plt.yticks(tick_marks, classNames)
+    s = [['TN','FP'], ['FN', 'TP']]
+ 
+    for i in range(2):
+        for j in range(2):
+            plt.text(j,i, str(s[i][j])+" = "+str(cm[i][j]))
+    plt.show()
 def result_from_predicitions(prediction_array):
     
     print("Results from prediction:")
@@ -723,10 +744,12 @@ def result_from_predicitions(prediction_array):
     print('\nModel Classification report:')
     print('-'*30)
     print(metrics.classification_report(prediction_array[0],prediction_array[1]))
+    plot_classification_report(prediction_array[0],prediction_array[1])
     print('\nPrediction Confusion Matrix:')
     print('-'*30)
     cm = metrics.confusion_matrix(y_true=prediction_array[0], y_pred=prediction_array[1])
     print(cm)
+    plot_cm(cm)
 #AUCROC for binary class only
 def plot_roc(pred_data, test_data):
     #courtesy of DATAI https://www.kaggle.com/kanncaa1/roc-curve-with-k-fold-cv
@@ -1076,8 +1099,10 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     print('-'*200)
     cm1 = metrics.confusion_matrix(y_true=test_data1, y_pred=preds1)
     print(cm1)
+    plot_cm(cm1)
     cm2 = metrics.confusion_matrix(y_true=test_data2, y_pred=preds2)
     print(cm2)
+    plot_cm(cm2)
     df1.to_csv('prediction1.csv', encoding='utf-8', index=True)
     df2.to_csv('prediction2.csv', encoding='utf-8', index=True)
 def sentences_to_indices(X, word_to_index, maxLen):

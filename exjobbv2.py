@@ -631,19 +631,19 @@ def predictor(data_array,method,multiclass):
 def generate_metrics(result,clf=None):
     title = ['Bow','TFIDF']
     if clf == 'NBG':
-        val = 'Naive Bayes Gaussian'
+        val = 'Naive_Bayes_Gaussian'
     elif clf == 'NBM':
-        val = 'Naive Bayes Multinomial'
+        val = 'Naive_Bayes_Multinomial'
     elif clf == 'SVM':
-        val = 'Support Vector Machine'
+        val = 'Support_Vector_Machine'
     elif clf == 'RF':
-        val = 'Random Forest'
+        val = 'Random_Forest'
     elif clf == 'ensemble':
         val = 'Ensemble'
     elif clf == 'gb':
-        val = 'Gradient Boosting'
+        val = 'Gradient_Boosting'
     else:
-        val = 'logistic regression'
+        val = 'Logistic_Regression'
     print('Metrics from Bag of Words on '+ val +':')
     print('-'*30)
     result_from_predicitions(result[0])
@@ -652,7 +652,7 @@ def generate_metrics(result,clf=None):
     print('-'*30)
     result_from_predicitions(result[1])
     print('-'*200)
-    plot_classification_report(result[0],result[1],title)
+    plot_classification_report(result[0],result[1],title,val)
     print('\nPrediction Confusion Matrix:')
     print('-'*200)
     cm1 = metrics.confusion_matrix(y_true=result[0][0], y_pred=result[0][1])
@@ -660,7 +660,7 @@ def generate_metrics(result,clf=None):
     print('-'*200)
     cm2 = metrics.confusion_matrix(y_true=result[1][0], y_pred=result[1][1])
     print(cm2)
-    plot_cm(cm1,cm2)
+    plot_cm(cm1,cm2,val)
     print('-'*200)
 def train_predict_model(classifier,X_train,X_test, y_train, y_test,multiclass):
     # build model
@@ -721,7 +721,7 @@ def initiate_predictions(train_test_data,method,multiclass):
     else:
         result = [true,predicted,acc,pred_prob]
     return result
-def plot_cm(cm1,cm2):
+def plot_cm(cm1,cm2,method):
     plt.figure(figsize=(20, 10))
     plt.subplot(121)
     
@@ -755,7 +755,9 @@ def plot_cm(cm1,cm2):
         for j in range(2):
             plt.text(j,i, str(s[i][j])+" = "+str(cm2[i][j]))
     plt.plot()
+    plt.savefig('confusionmatrix'+method+'.jpg')
     plt.show()
+    plt.close()
 def result_from_predicitions(prediction_array):
     
     print("Results from prediction:")
@@ -773,7 +775,7 @@ def result_from_predicitions(prediction_array):
     print(metrics.classification_report(prediction_array[0],prediction_array[1]))
     
 #AUCROC for binary class only
-def plot_roc(result1,result2,title):
+def plot_roc(result1,result2,title,method):
     #courtesy of DATAI https://www.kaggle.com/kanncaa1/roc-curve-with-k-fold-cv
     # plot arrows, why? to present accuracy
     fig1 = plt.figure(figsize=[20,10])
@@ -837,7 +839,10 @@ def plot_roc(result1,result2,title):
     plt.legend(loc="lower right")
     plt.text(0.32,0.7,'More accurate area',fontsize = 12)
     plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
+    
+    plt.savefig('roc'+method+'.pdf')
     plt.show()
+    plt.close()
 #perform predictions on classification methods
 def clf_predictor(input_data,multiclass):
     result_logregr = predictor(input_data,None,multiclass)
@@ -1146,7 +1151,8 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     print(metrics.classification_report(test_data2,preds2,labels,target_class))
     array1 = [test_data1,preds1]
     array2 = [test_data2,preds2]
-    plot_classification_report(array1,array2,title)
+    method = test1+'_'+test2
+    plot_classification_report(array1,array2,title,method)
     print('-'*200)
     print('\nPrediction Confusion Matrix:')
     print('-'*200)
@@ -1154,7 +1160,7 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     print(cm1)
     cm2 = metrics.confusion_matrix(y_true=test_data2, y_pred=preds2)
     print(cm2)
-    plot_cm(cm1,cm2)
+    plot_cm(cm1,cm2,method)
     df1.to_csv('prediction1.csv', encoding='utf-8', index=True)
     df2.to_csv('prediction2.csv', encoding='utf-8', index=True)
 def sentences_to_indices(X, word_to_index, maxLen):
@@ -1188,7 +1194,7 @@ def plot_function(track):
     plt.xlabel('epoch')
     plt.legend(['train'], loc='upper left')
     plt.show()
-def plot_classification_report(array1, array2,title, ax=None):
+def plot_classification_report(array1, array2,title,method, ax=None):
     plt.figure(figsize=(20, 10))
     plt.subplot(211)
     
@@ -1228,7 +1234,10 @@ def plot_classification_report(array1, array2,title, ax=None):
                 yticklabels=yticks,
                 ax=ax)
     
+    
+    plt.savefig('classificationreport'+ method +'.pdf')
     plt.show()
+    plt.close()
 #tokenizes the words
 def tokenizer2(train_data, test_data):
     train = fastText.tokenize(train_data)

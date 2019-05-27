@@ -629,6 +629,7 @@ def predictor(data_array,method,multiclass):
     return result
 #[6] prediction using the processed data
 def generate_metrics(result,clf=None):
+    title = ['Bow','TFIDF']
     if clf == 'NBG':
         val = 'Naive Bayes Gaussian'
     elif clf == 'NBM':
@@ -650,9 +651,17 @@ def generate_metrics(result,clf=None):
     print('Metrics from TF-IDF on '+ val +':')
     print('-'*30)
     result_from_predicitions(result[1])
-    print('-'*30)
-    print("plot graph")
-    print('-'*30)
+    print('-'*200)
+    plot_classification_report(result[0],result[1],title)
+    print('\nPrediction Confusion Matrix:')
+    print('-'*200)
+    cm1 = metrics.confusion_matrix(y_true=result[0][0], y_pred=result[0][1])
+    print(cm1)
+    print('-'*200)
+    cm2 = metrics.confusion_matrix(y_true=result[1][0], y_pred=result[1][1])
+    print(cm2)
+    plot_cm(cm1,cm2)
+    print('-'*200)
 def train_predict_model(classifier,X_train,X_test, y_train, y_test,multiclass):
     # build model
     assert X_train.shape[0] == y_train.shape[0]
@@ -712,22 +721,40 @@ def initiate_predictions(train_test_data,method,multiclass):
     else:
         result = [true,predicted,acc,pred_prob]
     return result
-def plot_cm(cm):
+def plot_cm(cm1,cm2):
+    plt.figure(figsize=(20, 10))
+    plt.subplot(121)
     
-    plt.clf()
-    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
+    plt.imshow(cm1, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
     classNames = ['Negative','Positive']
     plt.title('Result')
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     tick_marks = np.arange(len(classNames))
-    plt.xticks(tick_marks, classNames, rotation=45)
-    plt.yticks(tick_marks, classNames)
+    plt.xticks(tick_marks, classNames)
+    plt.yticks(tick_marks, classNames, rotation=90)
     s = [['TN','FP'], ['FN', 'TP']]
  
     for i in range(2):
         for j in range(2):
-            plt.text(j,i, str(s[i][j])+" = "+str(cm[i][j]))
+            plt.text(j,i, str(s[i][j])+" = "+str(cm1[i][j]))
+    
+    plt.subplot(122)
+    
+    plt.imshow(cm2, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
+    classNames = ['Negative','Positive']
+    plt.title('Result')
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    tick_marks = np.arange(len(classNames))
+    plt.xticks(tick_marks, classNames)
+    plt.yticks(tick_marks, classNames, rotation=90)
+    s = [['TN','FP'], ['FN', 'TP']]
+ 
+    for i in range(2):
+        for j in range(2):
+            plt.text(j,i, str(s[i][j])+" = "+str(cm2[i][j]))
+    plt.plot()
     plt.show()
 def result_from_predicitions(prediction_array):
     
@@ -744,18 +771,13 @@ def result_from_predicitions(prediction_array):
     print('\nModel Classification report:')
     print('-'*30)
     print(metrics.classification_report(prediction_array[0],prediction_array[1]))
-    plot_classification_report(prediction_array[0],prediction_array[1])
-    print('\nPrediction Confusion Matrix:')
-    print('-'*30)
-    cm = metrics.confusion_matrix(y_true=prediction_array[0], y_pred=prediction_array[1])
-    print(cm)
-    plot_cm(cm)
+    
 #AUCROC for binary class only
-def plot_roc(pred_data, test_data):
+def plot_roc(result1,result2,title):
     #courtesy of DATAI https://www.kaggle.com/kanncaa1/roc-curve-with-k-fold-cv
     # plot arrows, why? to present accuracy
-    fig1 = plt.figure(figsize=[12,12])
-    ax1 = fig1.add_subplot(111,aspect = 'equal')
+    fig1 = plt.figure(figsize=[20,10])
+    ax1 = fig1.add_subplot(121,aspect = 'equal')
     ax1.add_patch(
         patches.Arrow(0.45,0.5,-0.25,0.25,width=0.3,color='green',alpha = 0.5)
         )
@@ -765,22 +787,53 @@ def plot_roc(pred_data, test_data):
     tprs = []
     aucs = []
     mean_fpr = np.linspace(0,1,100)
-    for i in range(len(pred_data)):
-        fpr, tpr, _ = roc_curve(test_data, pred_data)
-        tprs.append(interp(mean_fpr, fpr, tpr))
-        roc_auc = auc(fpr, tpr)
-        aucs.append(roc_auc)
-        plt.plot(fpr, tpr, lw=2, alpha=0.3, label='ROC fold %d (AUC = %0.2f)' % (i, roc_auc))
+    #for i in range(len(result1[3])):
+    fpr, tpr, _ = roc_curve(result1[0], result1[3])
+    tprs.append(interp(mean_fpr, fpr, tpr))
+    roc_auc = auc(fpr, tpr)
+    aucs.append(roc_auc)
+    #plt.plot(fpr, tpr, lw=2, alpha=0.3, label=' (AUC = %0.2f)' % (roc_auc))
     
     plt.plot([0,1],[0,1],linestyle = '--',lw = 2,color = 'black')
     mean_tpr = np.mean(tprs, axis=0)
     mean_auc = auc(mean_fpr, mean_tpr)
-    plt.plot(mean_fpr, mean_tpr, color='blue',
-            label=r'Mean ROC (AUC = %0.2f )' % (mean_auc),lw=2, alpha=1)
+    plt.plot(mean_fpr, mean_tpr, color='red',
+            label=r'ROC (AUC = %0.2f )' % (mean_auc),lw=2, alpha=1)
     
     plt.xlabel('FPR')
     plt.ylabel('TPR')
-    plt.title('ROC')
+    plt.title('ROC '+title[0])
+    plt.legend(loc="lower right")
+    plt.text(0.32,0.7,'More accurate area',fontsize = 12)
+    plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
+
+    ax2 = fig1.add_subplot(122,aspect = 'equal')
+    ax2.add_patch(
+        patches.Arrow(0.45,0.5,-0.25,0.25,width=0.3,color='green',alpha = 0.5)
+        )
+    ax2.add_patch(
+        patches.Arrow(0.5,0.45,0.25,-0.25,width=0.3,color='red',alpha = 0.5)
+        )
+    tprs = []
+    aucs = []
+    mean_fpr = np.linspace(0,1,100)
+    #for i in range(len(result2[3])):
+    fpr, tpr, _ = roc_curve(result2[0], result2[3])
+    tprs.append(interp(mean_fpr, fpr, tpr))
+    roc_auc = auc(fpr, tpr)
+    aucs.append(roc_auc)
+    #plt.plot(fpr, tpr, lw=2, alpha=0.3, label='(AUC = %0.2f)' % (roc_auc))
+    
+    plt.plot([0,1],[0,1],linestyle = '--',lw = 2,color = 'black')
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_auc = auc(mean_fpr, mean_tpr)
+    
+    plt.plot(mean_fpr, mean_tpr, color='blue',
+            label=r'ROC (AUC = %0.2f )' % (mean_auc),lw=2, alpha=1)
+    
+    plt.xlabel('FPR')
+    plt.ylabel('TPR')
+    plt.title('ROC ' + title[1])
     plt.legend(loc="lower right")
     plt.text(0.32,0.7,'More accurate area',fontsize = 12)
     plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
@@ -1043,7 +1096,7 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
   
     test1 = ANN1
     test2 = ANN2
-    
+    title = [test1,test2]
     #keras evaluation
     score = model.evaluate(data2[1], data2[3], verbose=0)
     print("Model Performance of model 1: "+ test1 +" (Test):")
@@ -1089,20 +1142,19 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     print(df2)
     print('-'*200)
     print(metrics.classification_report(test_data1,preds1,labels,target_class))
-    plot_classification_report(test_data1,preds1)
-    print('-'*200)
     print('-'*200)
     print(metrics.classification_report(test_data2,preds2,labels,target_class))
-    plot_classification_report(test_data2,preds2)
+    array1 = [test_data1,preds1]
+    array2 = [test_data2,preds2]
+    plot_classification_report(array1,array2,title)
     print('-'*200)
     print('\nPrediction Confusion Matrix:')
     print('-'*200)
     cm1 = metrics.confusion_matrix(y_true=test_data1, y_pred=preds1)
     print(cm1)
-    plot_cm(cm1)
     cm2 = metrics.confusion_matrix(y_true=test_data2, y_pred=preds2)
     print(cm2)
-    plot_cm(cm2)
+    plot_cm(cm1,cm2)
     df1.to_csv('prediction1.csv', encoding='utf-8', index=True)
     df2.to_csv('prediction2.csv', encoding='utf-8', index=True)
 def sentences_to_indices(X, word_to_index, maxLen):
@@ -1136,15 +1188,16 @@ def plot_function(track):
     plt.xlabel('epoch')
     plt.legend(['train'], loc='upper left')
     plt.show()
-def plot_classification_report(y_tru, y_prd, figsize=(20, 10), ax=None):
-
-    plt.figure(figsize=figsize)
-    plt.title('Classification Report')
+def plot_classification_report(array1, array2,title, ax=None):
+    plt.figure(figsize=(20, 10))
+    plt.subplot(211)
+    
+    plt.title('Classification Report '+title[0])
     xticks = ['precision', 'recall', 'f1-score', 'support']
-    yticks = list(np.unique(y_tru))
+    yticks = list(np.unique(array1[0]))
     yticks += ['avg']
 
-    rep = np.array(precision_recall_fscore_support(y_tru, y_prd)).T
+    rep = np.array(precision_recall_fscore_support(array1[0], array1[1])).T
     avg = np.mean(rep, axis=0)
     avg[-1] = np.sum(rep[:, -1])
     rep = np.insert(rep, rep.shape[0], avg, axis=0)
@@ -1155,6 +1208,26 @@ def plot_classification_report(y_tru, y_prd, figsize=(20, 10), ax=None):
                 xticklabels=xticks, 
                 yticklabels=yticks,
                 ax=ax)
+
+    plt.subplot(212)
+    
+    plt.title('Classification Report '+title[1])
+    xticks = ['precision', 'recall', 'f1-score', 'support']
+    yticks = list(np.unique(array2[0]))
+    yticks += ['avg']
+
+    rep = np.array(precision_recall_fscore_support(array2[0], array2[1])).T
+    avg = np.mean(rep, axis=0)
+    avg[-1] = np.sum(rep[:, -1])
+    rep = np.insert(rep, rep.shape[0], avg, axis=0)
+
+    sns.heatmap(rep,
+                annot=True, 
+                cbar=False, 
+                xticklabels=xticks, 
+                yticklabels=yticks,
+                ax=ax)
+    
     plt.show()
 #tokenizes the words
 def tokenizer2(train_data, test_data):

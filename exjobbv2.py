@@ -22,6 +22,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss, accuracy_score
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import precision_recall_fscore_support
 from sklearn.svm import SVC
 import multiprocessing
 from multiprocessing import Pool
@@ -1065,9 +1066,11 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     print(df2)
     print('-'*200)
     print(metrics.classification_report(test_data1,preds1,labels,target_class))
+    plot_classification_report(test_data1,preds1)
     print('-'*200)
     print('-'*200)
     print(metrics.classification_report(test_data2,preds2,labels,target_class))
+    plot_classification_report(test_data2,preds2)
     print('-'*200)
     print('\nPrediction Confusion Matrix:')
     print('-'*200)
@@ -1107,6 +1110,26 @@ def plot_function(track):
     plt.ylabel('loss')
     plt.xlabel('epoch')
     plt.legend(['train'], loc='upper left')
+    plt.show()
+def plot_classification_report(y_tru, y_prd, figsize=(20, 10), ax=None):
+
+    plt.figure(figsize=figsize)
+    plt.title('Classification Report')
+    xticks = ['precision', 'recall', 'f1-score', 'support']
+    yticks = list(np.unique(y_tru))
+    yticks += ['avg']
+
+    rep = np.array(precision_recall_fscore_support(y_tru, y_prd)).T
+    avg = np.mean(rep, axis=0)
+    avg[-1] = np.sum(rep[:, -1])
+    rep = np.insert(rep, rep.shape[0], avg, axis=0)
+
+    sns.heatmap(rep,
+                annot=True, 
+                cbar=False, 
+                xticklabels=xticks, 
+                yticklabels=yticks,
+                ax=ax)
     plt.show()
 #tokenizes the words
 def tokenizer2(train_data, test_data):
@@ -1371,7 +1394,7 @@ def load_vectors_word2vec(fname,word_index):
         except KeyError:
             embedding_matrix[i]=np.random.normal(0,np.sqrt(0.25),EMBEDDING_DIM)
     del(word_vectors)
-    embedding_layer = Embedding(NB_WORDS,EMBEDDING_DIM,weights=[embedding_matrix])
+    embedding_layer = Embedding(NB_WORDS,EMBEDDING_DIM,weights=[embedding_matrix],trainable=False)
     embedding_layer.build(MAX_LEN)
     return embedding_layer
 def build_vocab(texts):
@@ -1429,7 +1452,7 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index,embeddings_index):
         if embedding_vector is not None: emb_matrix[index] = embedding_vector
         '''
     embedding_layer = Embedding(input_dim = vocab_len, output_dim = emb_dim,
-    mask_zero = False,input_length = MAX_SEQUENCE_LENGTH) 
+    mask_zero = False,input_length = MAX_SEQUENCE_LENGTH,trainable=False) 
 
     embedding_layer.build(MAX_LEN)
     embedding_layer.set_weights([emb_matrix])
@@ -1439,32 +1462,13 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index,embeddings_index):
 def bilstm(input_shape,embedding_layer1,dense):
     model = Sequential()
     model.add(embedding_layer1)
-    model.add(Bidirectional(LSTM(300,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',recurrent_activation='hard_sigmoid',use_bias=True)))
-    model.add(Dropout(0.001))
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
+    model.add(Bidirectional(LSTM(300)))
     model.add(Dense(600,activation='elu'))
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
     #model.add(Dense(3,activation='elu'))
-    model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    model.add(Dense(dense))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     adam = Adam(lr=0.009,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy','precision','recall'])
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy',precision,recall,f1_score])
     print(model.summary())
     return model
 def cnn2(input_shape,embedding_layer1,dense):
@@ -1473,34 +1477,14 @@ def cnn2(input_shape,embedding_layer1,dense):
     model.add(embedding_layer1)
     model.add(Conv1D(filters, kernel_size, padding='valid', activation='elu', strides=1))
     model.add(MaxPooling1D(pool_size=pool_size))
-    model.add(LSTM(300,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',recurrent_activation='hard_sigmoid',use_bias=True))
+    model.add(LSTM(300,return_sequences=True))
     model.add(GRU(300))
-    model.add(Dropout(0.001))
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
     model.add(Dense(512,activation='elu'))
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(Dense(3,activation='elu'))
-    model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    #model.add(Dense(3,activation='elu'))
+    model.add(Dense(dense))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy','precision','recall'])
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy',precision,recall,f1_score])
     print(model.summary())
     return model
 def cnn1(input_shape,embedding_layer1,dense):
@@ -1509,33 +1493,13 @@ def cnn1(input_shape,embedding_layer1,dense):
     model.add(embedding_layer1)
     model.add(Conv1D(filters, kernel_size, padding='valid', activation='relu', strides=1))
     model.add(MaxPooling1D(pool_size=pool_size))
-    model.add(LSTM(300,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',recurrent_activation='hard_sigmoid',use_bias=True))
-    model.add(Dropout(0.001))
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
+    model.add(LSTM(300))
     model.add(Dense(512,activation='elu'))
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(Dense(3,activation='elu'))
-    model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    #model.add(Dense(3,activation='elu'))
+    model.add(Dense(dense))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy','precision','recall'])
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy',precision,recall,f1_score])
     print(model.summary())
     return model
 def gru_model(input_shape,embedding_layer1,dense):
@@ -1573,32 +1537,14 @@ def gru_model2(input_shape,embedding_layer1,dense):
     model.add(embedding_layer1)
     model.add(GRU(lstm_out,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',use_bias=True,return_sequences=True))
     model.add(GRU(MAX_LEN,activation='relu'))
-    model.add(Dropout(0.001))
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
+    
     model.add(Dense(lstm_out,activation='elu'))
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.0003))
-    model.add(Dense(3,activation='elu'))
+    
+    #model.add(Dense(3,activation='elu'))
     model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     adam = Adam(lr=0.009,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy','precision','recall'])
+    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy',precision,recall,f1_score])
     print(model.summary())
     return model
 def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y_val,dense):

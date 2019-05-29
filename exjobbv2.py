@@ -50,7 +50,7 @@ from keras.constraints import unit_norm
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.naive_bayes import GaussianNB
 from keras.constraints import maxnorm
-from sklearn.svm import LinearSVC
+from sklearn.svm import LinearSVC,SVC
 from sklearn.ensemble import VotingClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelBinarizer
@@ -671,14 +671,14 @@ def train_predict_model(classifier,X_train,X_test, y_train, y_test,multiclass):
     elif classifier == 'NBM':
         model = MultinomialNB()
     elif classifier == 'SVM':
-        model = LinearSVC()
+        model = SVC(kernel='linear',probability=True)
     elif classifier == 'RF':
         model = RandomForestClassifier(n_estimators=50, random_state=1)
     elif classifier == 'ensemble':
         model1 = LogisticRegression()
         model2 = MultinomialNB()
         model3 = RandomForestClassifier(n_estimators=50, random_state=1)
-        model = VotingClassifier(estimators=[('lr', model1), ('nb', model2), ('rf', model3)], voting='hard')
+        model = VotingClassifier(estimators=[('lr', model1), ('nb', model2), ('rf', model3)], voting='soft')
     elif classifier == 'GB':
         model = XGBClassifier(n_estimators=100)
     else:
@@ -714,12 +714,8 @@ def initiate_predictions(train_test_data,method,multiclass):
     true = y_test
     
     pred_prob = prediction[2]
-    if method == None:
-        loss = prediction[2]
-        pred_prob = prediction[3]
-        result = [true,predicted,acc,loss,pred_prob]
-    else:
-        result = [true,predicted,acc,pred_prob]
+    
+    result = [true,predicted,acc,pred_prob]
     return result
 def plot_cm(cm1,cm2,method):
     plt.figure(figsize=(20, 10))
@@ -727,7 +723,7 @@ def plot_cm(cm1,cm2,method):
     
     plt.imshow(cm1, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
     classNames = ['Negative','Positive']
-    plt.title('Result')
+    plt.title('Result'+ method[0])
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     tick_marks = np.arange(len(classNames))
@@ -743,7 +739,7 @@ def plot_cm(cm1,cm2,method):
     
     plt.imshow(cm2, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
     classNames = ['Negative','Positive']
-    plt.title('Result')
+    plt.title('Result' + method[1])
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     tick_marks = np.arange(len(classNames))
@@ -755,7 +751,7 @@ def plot_cm(cm1,cm2,method):
         for j in range(2):
             plt.text(j,i, str(s[i][j])+" = "+str(cm2[i][j]))
     plt.plot()
-    plt.savefig('confusionmatrix'+method+'.jpg')
+    plt.savefig('confusion_matrix_'+method+'.pdf')
     plt.show()
     plt.close()
 def result_from_predicitions(prediction_array):
@@ -789,12 +785,13 @@ def plot_roc(result1,result2,title,method):
     tprs = []
     aucs = []
     mean_fpr = np.linspace(0,1,100)
-    #for i in range(len(result1[3])):
-    fpr, tpr, _ = roc_curve(result1[0], result1[3])
-    tprs.append(interp(mean_fpr, fpr, tpr))
-    roc_auc = auc(fpr, tpr)
-    aucs.append(roc_auc)
-    #plt.plot(fpr, tpr, lw=2, alpha=0.3, label=' (AUC = %0.2f)' % (roc_auc))
+    print(result1)
+    for i in range(len(result1[3])):
+        fpr, tpr, _ = roc_curve(result1[0], result1[3])
+        tprs.append(interp(mean_fpr, fpr, tpr))
+        roc_auc = auc(fpr, tpr)
+        aucs.append(roc_auc)
+        plt.plot(fpr, tpr, lw=2, alpha=0.3, label=' (AUC = %0.2f)' % (roc_auc))
     
     plt.plot([0,1],[0,1],linestyle = '--',lw = 2,color = 'black')
     mean_tpr = np.mean(tprs, axis=0)
@@ -840,7 +837,7 @@ def plot_roc(result1,result2,title,method):
     plt.text(0.32,0.7,'More accurate area',fontsize = 12)
     plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
     
-    plt.savefig('roc'+method+'.pdf')
+    plt.savefig('roc_'+method+'.pdf')
     plt.show()
     plt.close()
 #perform predictions on classification methods
@@ -1036,6 +1033,7 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     print(oov_fasttext[:18])
     '''
     vocab = None
+    #change corpus[1] to data_in[2]
     embedding_layer1 = pretrained_embedding_layer(corpus[0], corpus[1],vocab)
     print(corpus[4])
     
@@ -1235,7 +1233,7 @@ def plot_classification_report(array1, array2,title,method, ax=None):
                 ax=ax)
     
     
-    plt.savefig('classificationreport'+ method +'.pdf')
+    plt.savefig('classification_report_'+ method +'.pdf')
     plt.show()
     plt.close()
 #tokenizes the words
@@ -1553,11 +1551,7 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index,embeddings_index):
     
     for word, index in word_to_index.items():
         emb_matrix[index, :] = word_to_vec_map[word]
-        '''
-        if index >= NB_WORDS: continue
-        embedding_vector = embeddings_index.get(word)
-        if embedding_vector is not None: emb_matrix[index] = embedding_vector
-        '''
+        
     embedding_layer = Embedding(input_dim = vocab_len, output_dim = emb_dim,
     mask_zero = False,input_length = MAX_SEQUENCE_LENGTH,trainable=False) 
 

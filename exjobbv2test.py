@@ -16,6 +16,8 @@ import pickle
 import string
 from gensim.models import word2vec
 from collections import Counter
+import sklearn
+print('sklearn: %s' % sklearn.__version__)
 '''
 By: Dimitri Gharam
 This code will perform aside of preprocessing test 21 approaches of embeddings and encodings (15 encodings and 6 embeddings)
@@ -122,15 +124,15 @@ Part 1: Text Classification with BoW and TF-IDF
 print("##################################")
 print("Preprocessing:")
 print("----------------------------------")
-'''
+
 preproc1 = run.pre_processing1(input_data,df)
 preproc2 = npa.vectorize(run.pre_processing2)
 preproc2 = preproc2(df.FreeText)
 preproc3 = run.pre_processing1(input_data1,df)
 preproc4 = npa.vectorize(run.pre_processing2)
 preproc4 = preproc4(input_data1)
-'''
-'''
+
+
 #save
 with open('preproc1.pickle', 'wb') as handle:
     pickle.dump(preproc1, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -140,7 +142,7 @@ with open('preproc3.pickle', 'wb') as handle:
     pickle.dump(preproc3, handle, protocol=pickle.HIGHEST_PROTOCOL)
 with open('preproc4.pickle', 'wb') as handle:
     pickle.dump(preproc4, handle, protocol=pickle.HIGHEST_PROTOCOL)
-'''
+
 #load
 with open('preproc1.pickle', 'rb') as handle:
     input_data = pickle.load(handle)
@@ -149,6 +151,8 @@ with open('preproc1.pickle', 'rb') as handle:
 #input_data = preproc3
 #input_data = preproc4
 output_data = df.hosp_ed
+with open('output_data.pickle', 'wb') as handle:
+    pickle.dump(output_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 print("Preprocessing finished")
 print("##################################")
 '''
@@ -166,7 +170,7 @@ print("Embedding/Encoding/Processing starting")
 print("----------------------------------")
 #the result from these encodings are arrays containing training and test data for both the input and output
 #in order: input_train, input_test, output_train, output_test
-'''
+
 
 bow = run.text_processing(input_data,output_data, None, 1)
 tfidf = run.text_processing(input_data,output_data, "tfidf", 1)
@@ -176,7 +180,7 @@ with open('bow.pickle', 'wb') as handle:
 
 with open('bow.tfidf', 'wb') as handle:
     pickle.dump(tfidf, handle, protocol=pickle.HIGHEST_PROTOCOL)
-'''
+
 '''
 with open('bow.pickle', 'rb') as handle:
     bow = pickle.load(handle)
@@ -184,11 +188,12 @@ with open('bow.tfidf', 'rb') as handle:
     tfidf = pickle.load(handle)
 '''
 '''
+method = 'NBG'
 data_array = [bow,tfidf]
-multiclass = 'yes'
-result = run.predictor(data_array,'NBM',multiclass)
-run.generate_metrics(result,'NBM')
-
+multiclass = 'no'
+result = run.predictor(data_array,method,multiclass)
+run.generate_metrics(result,method)
+#method = 'Logistic_regression'
 #index 0=BOW
 #index1=TF*IDF
 #index[0][0] true data for BoW
@@ -196,10 +201,13 @@ run.generate_metrics(result,'NBM')
 #index[0][2] accuracy for BoW
 #if log reg is used: #index[0][3] is loss for BoW
 #else #index[0][3] is pred_proba for BoW
-#run.plot_roc(result[0][3],result[0][0])
-#run.plot_roc(result[1][3],result[1][0])
-#run.plot_metrics(run.create_plot_data(result1,'NBM'))
+title=[method+'BoW',method+'TFIDF']
+run.plot_roc(result[0],result[1],title,method)
+run.plot_roc2(result[0],result[1],title,method)
 '''
+#run.plot_roc(result[1][0],result[1][3])
+#run.plot_metrics(run.create_plot_data(result,'NBG'))
+
 print("Embedding/Encoding/Processing is finished")
 
 print("##################################")
@@ -240,7 +248,7 @@ ANN1 = 'lstm'
 ANN2 = 'gru'
 #print(outputdata)
 
-
+'''
 #run.eda2(df1)
 f = open('fasttext_train.txt', 'w')
 df['hosp_ed']=df['hosp_ed'].apply(lambda row: 'label_' + str(row))
@@ -252,11 +260,12 @@ input_data = df.FreeText.astype(str)
 input_data1 = df.iloc[:,1:2].FreeText.astype(str)
 #run.eda2(df)
 #run.eda2(df)
-
+''' 
+input_data = df.FreeText.astype(str)
 test = run.word_embeddings(input_data, output_data,ANN1,2,1)
 test1 = run.word_embeddings(input_data, output_data,ANN2,2,1)
 
-run.we_evaluation(test[0],test[1],test1[0],test1[1],ANN1,ANN2,test[2],test1[2])
+run.we_evaluation(test[3],test1[3],test[0],test[1],test1[0],test1[1],ANN1,ANN2,test[2],test1[2])
 '''
 #run.eda1(df)
 

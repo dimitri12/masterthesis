@@ -9,33 +9,43 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.cm as cmx
 import re
+import scipy as sp
 import io
 from numpy import array
 import pandas as pd
 import numpy as np
 from wordcloud import WordCloud
+import sklearn.metrics
+import sklearn
 from sklearn.model_selection import cross_val_predict
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.preprocessing import OneHotEncoder, scale 
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
+from keras.layers import LeakyReLU
+from keras.layers import ELU
 from sklearn.metrics import log_loss, accuracy_score
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import make_scorer, f1_score, precision_score, recall_score
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.svm import SVC
 import multiprocessing
+from sklearn.model_selection import learning_curve
 from multiprocessing import Pool
 from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 import gensim
+from keras.initializers import Constant
 import keras.backend as K
 import nltk
+from keras.wrappers.scikit_learn import KerasClassifier
 from nltk.corpus import stopwords
 import scikitplot.plotters as skplt
 from xgboost import XGBClassifier
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
 from keras.utils.np_utils import to_categorical
@@ -45,6 +55,7 @@ from keras.layers import Dense, Embedding, LSTM, SpatialDropout1D, Activation, L
 from keras.utils import to_categorical
 from keras.callbacks import ModelCheckpoint
 from keras.models import load_model
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from keras.optimizers import Adam
 from keras.constraints import unit_norm
 from sklearn.naive_bayes import MultinomialNB
@@ -70,6 +81,7 @@ from keras.layers.core import Reshape, Flatten
 from keras.callbacks import EarlyStopping
 from keras.activations import relu
 from keras.optimizers import SGD
+from sklearn.metrics import make_scorer, accuracy_score
 from sklearn.exceptions import DataConversionWarning
 from sklearn.feature_extraction.text import TfidfTransformer
 import seaborn as sns
@@ -328,34 +340,40 @@ def eda1(df):
 def eda2(df):
     #max number of words in a sentence
     df1 = pd.DataFrame(df)
-    df1['FreeText_count'] = df['FreeText'].apply(lambda x: Counter(x.split(' ')))
+    df1['FreeText_count'] = df['freetext'].astype(str).apply(lambda x: Counter(x.split(' ')))
     LEN = df1['FreeText_count'].apply(lambda x : sum(x.values()))
     max_LEN = max(LEN)
     global MAX_LEN
     MAX_LEN = max_LEN
+    print("MAX_LEN is:")
+    print(max_LEN)
     #length of sequence
-    df["FreeText_len"] = df["FreeText"].apply(lambda x: len(x))
+    df["FreeText_len"] = df["freetext"].astype(str).apply(lambda x: len(x))
     #maximum number of sequence length
     #print(df["FreeText_len"].max())
     df["FreeText_len"].hist(figsize = (15, 10), bins = 100)
     plt.show()
     global MAX_SEQUENCE_LENGTH
     MAX_SEQUENCE_LENGTH = df["FreeText_len"].max()
+    print("MAX_SEQUENCE_LENGTH is:")
+    print(MAX_SEQUENCE_LENGTH)
     global NB_WORDS
     NB_WORDS = df['FreeText_len'].sum()
+    print("NB_WORDS is:")
+    print(NB_WORDS)
     #word EDA
-    dummies2 = df.iloc[:,1:2]
-    tsne_plot(dummies2)
+    #dummies2 = df.iloc[:,1:2]
+    #tsne_plot(dummies2)
     #wordcloud
-    df['FreeText'] = [cleaning(s) for s in df['FreeText']]
-    input_data = df['FreeText']
-    word_cloud(input_data)
-    with open('corpus.pickle', 'rb') as handle:
-        corpus = pickle.load(handle)
-    xt = np.concatenate(corpus)
-    plt.figure(figsize=(20,10))
-    pd.value_counts(xt).plot(kind="barh")
-    plt.show()
+    df['FreeText'] = [cleaning(s) for s in df['freetext'].astype(str)]
+    #input_data = df['freetext']
+    #word_cloud(input_data)
+    #with open('corpus.pickle', 'rb') as handle:
+        #corpus = pickle.load(handle)
+    #xt = np.concatenate(corpus)
+    #plt.figure(figsize=(20,10))
+    #pd.value_counts(xt).plot(kind="barh")
+    #plt.show()
     
 def word_cloud(input_data,title=None):
     wordcloud = WordCloud(
@@ -478,6 +496,7 @@ def text_processing(input_data, output_data, processing_method=None, truncated=N
         #one of these alternatives can be used but it depends on the classification result
         #[2]
         #Alternative 1 from [2]
+        '''
         #try to use aside from word: char or char_wb
         bag_of_words_vector = CountVectorizer(analyzer="word")
         bag_of_words_matrix = bag_of_words_vector.fit_transform(input_data)
@@ -485,11 +504,11 @@ def text_processing(input_data, output_data, processing_method=None, truncated=N
         bag_of_words_matrix = bag_of_words_matrix.toarray()
         '''
         #Alternative 2
-        bag_of_words_vector = CountVectorizer(min_df = 0.0, max_df = 1.0, ngram_range=(2,2))
+        bag_of_words_vector = CountVectorizer(min_df = 0.0, max_df = 1.0, ngram_range=(1,1))
         bag_of_words_matrix = bag_of_words_vector.fit_transform(input_data)
         #denna är viktig
         bag_of_words_matrix = bag_of_words_matrix.toarray()
-        '''
+        
         #using LSA: Latent Semantic Analysis or LSI
         if truncated == 1:
             svd = TruncatedSVD(n_components=25, n_iter=25, random_state=12)
@@ -499,23 +518,23 @@ def text_processing(input_data, output_data, processing_method=None, truncated=N
         result = feature_engineering(bag_of_words_matrix,output_data)
         return result
     elif processing_method =='tfidf':
-        
+        '''
         #[2]
         Tfidf_Vector = TfidfVectorizer(analyzer="char_wb")    
         Tfidf_Matrix = Tfidf_Vector.fit_transform(input_data)
         Tfidf_Matrix = Tfidf_Matrix.toarray()
-        '''
+        
         #Alternative 2 from [1]
         Tfidf_Vector = TfidfVectorizer(min_df = 0., max_df = 1., use_idf = True)
         Tfidf_Matrix = Tfidf_Vector.fit_transform(input_data)
         Tfidf_Matrix = Tfidf_Matrix.toarray()
-        
+        '''
         
         #Alternative 3
         Tfidf_Vector = TfidfVectorizer(min_df=0.0, max_df=1.0, ngram_range=(1,1), sublinear_tf=True)
         Tfidf_Matrix = Tfidf_Vector.fit_transform(input_data)
         Tfidf_Matrix = Tfidf_Matrix.toarray()
-        '''
+    
        
         
         if truncated == 1:
@@ -606,15 +625,15 @@ def predictor(data_array,method,multiclass):
         SVMres_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [SVMres_BoW,SVMres_tfidf]
         return result
-    elif method == 'RF':
-        RFres_BoW = initiate_predictions(data_array[0],method,multiclass)
-        RFres_tfidf = initiate_predictions(data_array[1],method,multiclass)
-        result = [RFres_BoW,RFres_tfidf]
-        return result
     elif method == 'ensemble':
         res_BoW = initiate_predictions(data_array[0],method,multiclass)
         res_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [res_BoW,res_tfidf]
+        return result
+    elif method == 'RF':
+        RFres_BoW = initiate_predictions(data_array[0],method,multiclass)
+        RFres_tfidf = initiate_predictions(data_array[1],method,multiclass)
+        result = [RFres_BoW,RFres_tfidf]
         return result
     elif method == 'GB':
         GBres_BoW = initiate_predictions(data_array[0],method,multiclass)
@@ -662,46 +681,294 @@ def generate_metrics(result,clf=None):
     print(cm2)
     plot_cm(cm1,cm2,val)
     print('-'*200)
+    print('Metrics from Bag of Words on '+ val +':')
+    print('-'*30)
+    result_from_predicitions2(result[0])
+    print('-'*30)
+    print('Metrics from TF-IDF on '+ val +':')
+    print('-'*30)
+    result_from_predicitions2(result[1])
+    print('-'*200)
+    plot_classification_report2(result[0],result[1],title,val)
+    print('\nPrediction Confusion Matrix:')
+    print('-'*200)
+    cm1 = metrics.confusion_matrix(y_true=result[0][0], y_pred=result[0][4])
+    print(cm1)
+    print('-'*200)
+    cm2 = metrics.confusion_matrix(y_true=result[1][0], y_pred=result[1][4])
+    print(cm2)
+    plot_cm2(cm1,cm2,val)
+    print('-'*200)
 def train_predict_model(classifier,X_train,X_test, y_train, y_test,multiclass):
     # build model
     assert X_train.shape[0] == y_train.shape[0]
     assert X_test.shape[0] == y_test.shape[0]
+    # Choose some parameter combinations to try
+    
+
+    # Type of scoring used to compare parameter combinations
+    acc_scorer = make_scorer(accuracy_score)
+    kfolds = StratifiedKFold(n_splits=2, shuffle=True, random_state=1)
+    '''
+    # Run the grid search
+    grid_obj = GridSearchCV(clf, parameters, scoring=acc_scorer)
+    grid_obj = grid_obj.fit(X_train, y_train)
+
+    # Set the clf to the best combination of parameters
+    clf = grid_obj.best_estimator_
+
+    # Fit the best algorithm to the data. 
+    clf.fit(X_train, y_train)
+    '''
+
     if classifier == 'NBG':
+        train_sizes=np.linspace(.1, 1.0, 15)
         model = GaussianNB()
-    elif classifier == 'NBM':
-        model = MultinomialNB()
+        print(model.get_params().keys())
+        parameters = {'var_smoothing': ( 1e-9,5e-10, 1e-10)}
+        grid_obj = GridSearchCV(model, parameters,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
+        start_time = time.time()
+        grid_obj = grid_obj.fit(X_train, y_train)
+        print("Execution time: " + str((time.time() - start_time)) + ' ms')
+        clf = grid_obj.best_estimator_
+        clf.fit(X_train, y_train)
+        predicted1= clf.predict(X_test)
+        print(clf)
+        pred_prob1 = clf.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, pred_prob1)
+        acc = accuracy_score(y_test, predicted1)
+        f1 = f1_score(y_test, predicted1)
+        prec = precision_score(y_test, predicted1)
+        rec = recall_score(y_test, predicted1)
+        print("Grid search classifier")
+        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
+        print(result)
+
+        rand_obj = RandomizedSearchCV(model, parameters,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
+        start_time = time.time()
+        rand_obj = rand_obj.fit(X_train, y_train)
+        print("Execution time: " + str((time.time() - start_time)) + ' ms')
+        clf2 = rand_obj.best_estimator_
+        clf2.fit(X_train, y_train)
+        predicted2 = clf2.predict(X_test)
+        print(clf2)
+        pred_prob2 = clf2.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, pred_prob2)
+        acc = accuracy_score(y_test, predicted2)
+        f1 = f1_score(y_test, predicted2)
+        prec = precision_score(y_test, predicted2)
+        rec = recall_score(y_test, predicted2)
+        print("Rand search classifier")
+        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
+        print(result)
+        #title = "learning curve for Naive Bayes"
+        #plot_learning_curve(clf,title,X_train, y_train, ylim=(0, 1.01),cv=kfolds,n_jobs=-1,train_sizes=train_sizes)
+        #plt.show()
     elif classifier == 'SVM':
-        model = SVC(kernel='linear',probability=True)
+        train_sizes=np.linspace(.1, 1.0, 15)
+        model = SVC(C=1, probability=True)
+        param_grid = {'C':[0.5,1.0,2.0, 3.0],  # penalty parameter C of the error term
+              'kernel':['linear', 'rbf'], # specifies the kernel type to be used in the algorithm  
+              'gamma':[0.02, 0.08,0.2,1.0] # kernel coefficient for 'rbf'
+             }
+        grid_obj = GridSearchCV(model, param_grid,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
+        start_time = time.time()
+        grid_obj = grid_obj.fit(X_train, y_train)
+        print("Execution time: " + str((time.time() - start_time)) + ' ms')
+        clf = grid_obj.best_estimator_
+        clf.fit(X_train, y_train)
+        predicted1 = clf.predict(X_test)
+        print(clf)
+        pred_prob1 = clf.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, pred_prob1)
+        acc = accuracy_score(y_test, predicted1)
+        f1 = f1_score(y_test, predicted1)
+        prec = precision_score(y_test, predicted1)
+        rec = recall_score(y_test, predicted1)
+        print("Grid search classifier")
+        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
+        print(result)
+
+        rand_obj = RandomizedSearchCV(model, param_grid,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
+        start_time = time.time()
+        rand_obj = rand_obj.fit(X_train, y_train)
+        print("Execution time: " + str((time.time() - start_time)) + ' ms')
+        clf2 = rand_obj.best_estimator_
+        clf2.fit(X_train, y_train)
+        predicted2 = clf2.predict(X_test)
+        print(clf2)
+        pred_prob2 = clf2.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, pred_prob2)
+        acc = accuracy_score(y_test, predicted2)
+        f1 = f1_score(y_test, predicted2)
+        prec = precision_score(y_test, predicted2)
+        rec = recall_score(y_test, predicted2)
+        print("Rand search classifier")
+        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
+        print(result)
     elif classifier == 'RF':
-        model = RandomForestClassifier(n_estimators=50, random_state=1)
+        model = RandomForestClassifier(n_estimators=50, random_state=1,n_jobs = -1)
+        param = {'n_estimators': [4, 6, 9], 
+              'max_features': ['log2', 'sqrt','auto'], 
+              'criterion': ['entropy', 'gini'],
+              'max_depth': [2, 3, 5, 10], 
+              'min_samples_split': [2, 3, 5],
+              'min_samples_leaf': [1,5,8]
+             }
+        grid_obj = GridSearchCV(model, param,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
+        start_time = time.time()
+        grid_obj = grid_obj.fit(X_train, y_train)
+        print("Execution time: " + str((time.time() - start_time)) + ' ms')
+        clf = grid_obj.best_estimator_
+        clf.fit(X_train, y_train)
+        predicted1 = clf.predict(X_test)
+        print(clf)
+        pred_prob1 = clf.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, pred_prob1)
+        acc = accuracy_score(y_test, predicted1)
+        f1 = f1_score(y_test, predicted1)
+        prec = precision_score(y_test, predicted1)
+        rec = recall_score(y_test, predicted1)
+        print("Grid search classifier")
+        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
+        print(result)
+
+        rand_obj = RandomizedSearchCV(model, param,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
+        start_time = time.time()
+        rand_obj = rand_obj.fit(X_train, y_train)
+        print("Execution time: " + str((time.time() - start_time)) + ' ms')
+        clf2 = rand_obj.best_estimator_
+        clf2.fit(X_train, y_train)
+        predicted2 = clf2.predict(X_test)
+        print(clf2)
+        pred_prob2 = clf2.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, pred_prob2)
+        acc = accuracy_score(y_test, predicted2)
+        f1 = f1_score(y_test, predicted2)
+        prec = precision_score(y_test, predicted2)
+        rec = recall_score(y_test, predicted2)
+        print("Rand search classifier")
+        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
+        print(result)
+        title = "learning curve for random forest"
+        plot_learning_curve(clf,title,X_train, y_train, ylim=(0, 1.01),cv=kfolds,n_jobs=-1,train_sizes=train_sizes)
+        plt.show()
     elif classifier == 'ensemble':
-        model1 = LogisticRegression()
-        model2 = MultinomialNB()
-        model3 = RandomForestClassifier(n_estimators=50, random_state=1)
-        model = VotingClassifier(estimators=[('lr', model1), ('nb', model2), ('rf', model3)], voting='soft')
+        model1 = XGBClassifier(n_estimators=100)
+        model2 = LogisticRegression(n_jobs = -1)
+        model3 = RandomForestClassifier(n_estimators=50, random_state=1,n_jobs = -1)
+        model4 = GaussianNB()
+        model = VotingClassifier(estimators=[('gb', model1), ('lr', model2), ('rf', model3),('nb',model4)], voting='soft')
+        #model.fit(X_train, y_train)
+        model.fit(X_train, y_train)
+        #model.fit(X_train, y_train)
+        # predict using model
+        predicted1 = model.predict(X_test)
+        pred_prob1 = model.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, pred_prob1)
+        acc = accuracy_score(y_test, predicted1)
+        f1 = f1_score(y_test, predicted1)
+        prec = precision_score(y_test, predicted1)
+        rec = recall_score(y_test, predicted1)
+        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
+        print(result)
     elif classifier == 'GB':
         model = XGBClassifier(n_estimators=100)
+        parameters = {
+        "loss":["deviance"],
+        "learning_rate": [0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2],
+        "min_samples_split": np.linspace(0.1, 0.5, 12),
+        "min_samples_leaf": np.linspace(0.1, 0.5, 12),
+        "max_depth":[3,5,8],
+        "max_features":["log2","sqrt"],
+        "criterion": ["friedman_mse",  "mae"],
+        "subsample":[0.5, 0.618, 0.8, 0.85, 0.9, 0.95, 1.0],
+        "n_estimators":[10]
+        }
+        grid_obj = GridSearchCV(model, parameters,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
+        start_time = time.time()
+        grid_obj = grid_obj.fit(X_train, y_train)
+        print("Execution time: " + str((time.time() - start_time)) + ' ms')
+        clf = grid_obj.best_estimator_
+        clf.fit(X_train, y_train)
+        predicted1 = clf.predict(X_test)
+        print(clf)
+        pred_prob1 = clf.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, pred_prob1)
+        acc = accuracy_score(y_test, predicted1)
+        f1 = f1_score(y_test, predicted1)
+        prec = precision_score(y_test, predicted1)
+        rec = recall_score(y_test, predicted1)
+        print("Grid search classifier")
+        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
+        print(result)
+
+        rand_obj = RandomizedSearchCV(model, parameters,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
+        start_time = time.time()
+        rand_obj = rand_obj.fit(X_train, y_train)
+        print("Execution time: " + str((time.time() - start_time)) + ' ms')
+        clf2 = rand_obj.best_estimator_
+        clf2.fit(X_train, y_train)
+        predicted2 = clf2.predict(X_test)
+        print(clf2)
+        pred_prob2 = clf2.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, pred_prob2)
+        acc = accuracy_score(y_test, predicted2)
+        f1 = f1_score(y_test, predicted2)
+        prec = precision_score(y_test, predicted2)
+        rec = recall_score(y_test, predicted2)
+        print("Rand search classifier")
+        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
+        print(result)
+        title = "learning curve for gradient boosting"
+        plot_learning_curve(clf,title,X_train, y_train, ylim=(0, 1.01),cv=kfolds,n_jobs=-1,train_sizes=train_sizes)
+        plt.show()
     else:
-        if multiclass == 'yes':
-            model = LogisticRegression(multi_class = 'multinomial', solver = 'lbfgs')
-        else:
-            model = LogisticRegression()
-    model.fit(X_train, y_train)
-    # predict using model
-    predicted = model.predict(X_test)
-    if (classifier != 'SVM' or classifier != 'ensemble'):
-        pred_prob = model.predict_proba(X_test)[:,1]
-        #pred_prob = None
+        train_sizes=np.linspace(.1, 1.0, 15)
+        model = LogisticRegression(n_jobs = -1)
+        params = { 'C' : [1.1,1.25,1.5]}
+        grid_obj = GridSearchCV(model, params,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
+        start_time = time.time()
+        grid_obj = grid_obj.fit(X_train, y_train)
+        print("Execution time: " + str((time.time() - start_time)) + ' ms')
+        clf = grid_obj.best_estimator_
+        clf.fit(X_train, y_train)
+        predicted1 = clf.predict(X_test)
+        print(clf)
+        pred_prob1 = clf.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, pred_prob1)
+        acc = accuracy_score(y_test, predicted1)
+        f1 = f1_score(y_test, predicted1)
+        prec = precision_score(y_test, predicted1)
+        rec = recall_score(y_test, predicted1)
+        print("Grid search classifier")
+        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
+        print(result)
+
+        rand_obj = RandomizedSearchCV(model, params,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
+        start_time = time.time()
+        rand_obj = rand_obj.fit(X_train, y_train)
+        print("Execution time: " + str((time.time() - start_time)) + ' ms')
+        clf2 = rand_obj.best_estimator_
+        clf2.fit(X_train, y_train)
+        predicted2 = clf2.predict(X_test)
+        print(clf2)
+        pred_prob2 = clf2.predict_proba(X_test)[:, 1]
+        auc = roc_auc_score(y_test, pred_prob2)
+        acc = accuracy_score(y_test, predicted2)
+        f1 = f1_score(y_test, predicted2)
+        prec = precision_score(y_test, predicted2)
+        rec = recall_score(y_test, predicted2)
+        print("Rand search classifier")
+        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
+        print(result)
+        title = "learning curve for logreg"
+        plot_learning_curve(clf,title,X_train, y_train, ylim=(0, 1.01),cv=kfolds,n_jobs=-1,train_sizes=train_sizes)
+        plt.show()
+    if classifier != 'ensemble':
+        result = [predicted1,acc,pred_prob1,predicted2,pred_prob2]
     else:
-        pred_prob = None
-    acc = metrics.accuracy_score(y_test,predicted)
-    acc = acc*100
-    if classifier == None:
-        loss = log_loss(y_test,predicted)
-        result = [predicted,acc,loss,pred_prob]
-    else:
-    
-        result = [predicted,acc,pred_prob]
+        result = [predicted1,acc,pred_prob1]
     return result    
 def initiate_predictions(train_test_data,method,multiclass):
     X_train = train_test_data[0]
@@ -709,13 +976,15 @@ def initiate_predictions(train_test_data,method,multiclass):
     y_train = train_test_data[2]
     y_test = train_test_data[3]
     prediction = train_predict_model(method,X_train,X_test,y_train,y_test,multiclass)
-    predicted = prediction[0]
+    predicted1 = prediction[0]
     acc = prediction[1]
+    #true = y_train
     true = y_test
     
-    pred_prob = prediction[2]
-    
-    result = [true,predicted,acc,pred_prob]
+    pred_prob1 = prediction[2]
+    predicted2 = prediction[3]
+    pred_prob2 = prediction[4]
+    result = [true,predicted1,acc,pred_prob1,predicted2,pred_prob2]
     return result
 def plot_cm(cm1,cm2,method):
     plt.figure(figsize=(20, 10))
@@ -754,6 +1023,47 @@ def plot_cm(cm1,cm2,method):
     plt.savefig('confusion_matrix_'+method+'.pdf')
     plt.show()
     plt.close()
+def plot_cm2(cm1,cm2,method):
+    plt.figure(figsize=(20, 10))
+    plt.subplot(121)
+    
+    plt.imshow(cm1, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
+    classNames = ['Negative','Positive']
+    plt.title('Result'+ method[0])
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    tick_marks = np.arange(len(classNames))
+    plt.xticks(tick_marks, classNames)
+    plt.yticks(tick_marks, classNames, rotation=90)
+    s = [['TN','FP'], ['FN', 'TP']]
+ 
+    for i in range(2):
+        for j in range(2):
+            plt.text(j,i, str(s[i][j])+" = "+str(cm1[i][j]))
+    
+    plt.subplot(122)
+    
+    plt.imshow(cm2, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
+    classNames = ['Negative','Positive']
+    plt.title('Result' + method[1])
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    tick_marks = np.arange(len(classNames))
+    plt.xticks(tick_marks, classNames)
+    plt.yticks(tick_marks, classNames, rotation=90)
+    s = [['TN','FP'], ['FN', 'TP']]
+ 
+    for i in range(2):
+        for j in range(2):
+            plt.text(j,i, str(s[i][j])+" = "+str(cm2[i][j]))
+    plt.plot()
+    plt.savefig('confusion_matrix2_'+method+'.pdf')
+    plt.show()
+    plt.close()
+def get_roc_curve(model, X, y):
+    pred_proba = model.predict_proba(X)[:, 1]
+    fpr, tpr, _ = roc_curve(y, pred_proba)
+    return fpr, tpr
 def result_from_predicitions(prediction_array):
     
     print("Results from prediction:")
@@ -763,17 +1073,78 @@ def result_from_predicitions(prediction_array):
     print('Model Performance metrics:')
     print('-'*30)
     print('Accuracy:', np.round(metrics.accuracy_score(prediction_array[0],prediction_array[1]),4))
-    print('Precision:', np.round(metrics.precision_score(prediction_array[0],prediction_array[1],average='weighted'),4))
-    print('Recall:', np.round(metrics.recall_score(prediction_array[0],prediction_array[1],average='weighted'),4))
-    print('F1 Score:', np.round(metrics.f1_score(prediction_array[0],prediction_array[1],average='weighted'),4))
+    print('Precision:', np.round(metrics.precision_score(prediction_array[0],prediction_array[1],average='micro'),4))
+    print('Recall:', np.round(metrics.recall_score(prediction_array[0],prediction_array[1],average='micro'),4))
+    print('F1 Score:', np.round(metrics.f1_score(prediction_array[0],prediction_array[1],average='micro'),4))
     print('\nModel Classification report:')
     print('-'*30)
     print(metrics.classification_report(prediction_array[0],prediction_array[1]))
+def result_from_predicitions2(prediction_array):
     
+    print("Results from prediction:")
+    print('-'*30)
+    df1=pd.DataFrame({'Actual':prediction_array[0], 'Predicted':prediction_array[4]})
+    print(df1)
+    print('Model Performance metrics:')
+    print('-'*30)
+    print('Accuracy:', np.round(metrics.accuracy_score(prediction_array[0],prediction_array[4]),4))
+    print('Precision:', np.round(metrics.precision_score(prediction_array[0],prediction_array[4],average='micro'),4))
+    print('Recall:', np.round(metrics.recall_score(prediction_array[0],prediction_array[4],average='micro'),4))
+    print('F1 Score:', np.round(metrics.f1_score(prediction_array[0],prediction_array[4],average='micro'),4))
+    print('\nModel Classification report:')
+    print('-'*30)
+    print(metrics.classification_report(prediction_array[0],prediction_array[4]))
+def plot_learning_curve(estimator, title, X, y, ylim, cv, n_jobs, train_sizes):
+    
+    plt.figure()
+    plt.title(title)
+    if ylim is not None:
+        plt.ylim(*ylim)
+    plt.xlabel("Training examples")
+    plt.ylabel("Score")
+    train_sizes, train_scores, test_scores = learning_curve(estimator, X, y, cv=cv, n_jobs=n_jobs, train_sizes=train_sizes)
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+    plt.grid()
+
+    plt.fill_between(train_sizes, train_scores_mean - train_scores_std,
+                     train_scores_mean + train_scores_std, alpha=0.1,
+                     color="r")
+    plt.fill_between(train_sizes, test_scores_mean - test_scores_std,
+                     test_scores_mean + test_scores_std, alpha=0.1, color="g")
+    plt.plot(train_sizes, train_scores_mean, 'o-', color="r",
+             label="Training score")
+    plt.plot(train_sizes, test_scores_mean, 'o-', color="g",
+             label="Cross-validation score")
+
+    plt.legend(loc="best")
+    return plt
+def run_kfold(clf):
+    kf = KFold(n_splits=10,shuffle=True)
+    outcomes = []
+    with open('output_data.pickle', 'rb') as handle:
+        output_data = pickle.load(handle)
+    with open('preproc1.pickle', 'rb') as handle:
+        input_data = pickle.load(handle)
+    fold = 0
+    for train_index, test_index in kf.split(input_data):
+        fold += 1
+        X_train, X_test = input_data.values[train_index], input_data.values[test_index]
+        y_train, y_test = output_data.values[train_index], output_data.values[test_index]
+        clf.fit(X_train, y_train)
+        predictions = clf.predict(X_test)
+        accuracy = accuracy_score(y_test, predictions)
+        outcomes.append(accuracy)
+        print("Fold {0} accuracy: {1}".format(fold, accuracy))     
+    mean_outcome = np.mean(outcomes)
+    print("Mean Accuracy: {0}".format(mean_outcome)) 
 #AUCROC for binary class only
 def plot_roc(result1,result2,title,method):
     #courtesy of DATAI https://www.kaggle.com/kanncaa1/roc-curve-with-k-fold-cv
     # plot arrows, why? to present accuracy
+    '''
     fig1 = plt.figure(figsize=[20,10])
     ax1 = fig1.add_subplot(121,aspect = 'equal')
     ax1.add_patch(
@@ -786,12 +1157,18 @@ def plot_roc(result1,result2,title,method):
     aucs = []
     mean_fpr = np.linspace(0,1,100)
     print(result1)
-    for i in range(len(result1[3])):
-        fpr, tpr, _ = roc_curve(result1[0], result1[3])
-        tprs.append(interp(mean_fpr, fpr, tpr))
-        roc_auc = auc(fpr, tpr)
-        aucs.append(roc_auc)
-        plt.plot(fpr, tpr, lw=2, alpha=0.3, label=' (AUC = %0.2f)' % (roc_auc))
+    #for i in range(len(result1[3])):
+    fpr, tpr, _ = roc_curve(result1[0], result1[5])
+    with open('fpr'+title[0]+method+'.pickle', 'wb') as handle:
+        pickle.dump(fpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        with open('tpr'+title[0]+method+'.pickle', 'wb') as handle:
+            pickle.dump(tpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    tprs.append(interp(mean_fpr, fpr, tpr))
+    roc_auc = auc(fpr, tpr)
+    aucs.append(roc_auc)
+    #plt.plot(fpr, tpr, lw=2, alpha=0.3, label=' (AUC = %0.2f)' % (roc_auc))
     
     plt.plot([0,1],[0,1],linestyle = '--',lw = 2,color = 'black')
     mean_tpr = np.mean(tprs, axis=0)
@@ -817,7 +1194,12 @@ def plot_roc(result1,result2,title,method):
     aucs = []
     mean_fpr = np.linspace(0,1,100)
     #for i in range(len(result2[3])):
-    fpr, tpr, _ = roc_curve(result2[0], result2[3])
+    fpr, tpr, _ = roc_curve(result2[0], result2[5])
+    with open('fpr'+title[1]+method+'.pickle', 'wb') as handle:
+        pickle.dump(fpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        with open('tpr'+title[1]+method+'.pickle', 'wb') as handle:
+            pickle.dump(tpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
     tprs.append(interp(mean_fpr, fpr, tpr))
     roc_auc = auc(fpr, tpr)
     aucs.append(roc_auc)
@@ -836,8 +1218,143 @@ def plot_roc(result1,result2,title,method):
     plt.legend(loc="lower right")
     plt.text(0.32,0.7,'More accurate area',fontsize = 12)
     plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
+    '''
+    figsize=(20, 10)
     
-    plt.savefig('roc_'+method+'.pdf')
+    ticksize = 14
+    titlesize = ticksize + 8
+    labelsize = ticksize + 5
+
+    params = {'figure.figsize' : figsize,
+            'axes.labelsize' : labelsize,
+            'axes.titlesize' : titlesize,
+            'xtick.labelsize': ticksize,
+            'ytick.labelsize': ticksize}
+
+    plt.rcParams.update(params)
+    fpr_keras1, tpr_keras1, _ = roc_curve(result1[0], result1[3])
+    fpr_keras2, tpr_keras2, _ = roc_curve(result2[0], result2[3])
+    auc_keras1 = auc(fpr_keras1, tpr_keras1)
+    auc_keras2 = auc(fpr_keras2, tpr_keras2)
+    plt.figure(1)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.plot(fpr_keras1, tpr_keras1, label= title[0] +'(area = {:.3f})'.format(auc_keras1))
+    plt.plot(fpr_keras2, tpr_keras2, label= title[1] +'(area = {:.3f})'.format(auc_keras2))
+    plt.xlabel('False positive rate')
+    plt.ylabel('True positive rate')
+    plt.title('ROC curve')
+    plt.legend(loc='best')
+    plt.show()
+
+    plt.savefig('roc1_'+method+'.pdf')
+    plt.show()
+    plt.close()
+def plot_roc2(result1,result2,title,method):
+    #courtesy of DATAI https://www.kaggle.com/kanncaa1/roc-curve-with-k-fold-cv
+    # plot arrows, why? to present accuracy
+    '''
+    fig1 = plt.figure(figsize=[20,10])
+    ax1 = fig1.add_subplot(121,aspect = 'equal')
+    ax1.add_patch(
+        patches.Arrow(0.45,0.5,-0.25,0.25,width=0.3,color='green',alpha = 0.5)
+        )
+    ax1.add_patch(
+        patches.Arrow(0.5,0.45,0.25,-0.25,width=0.3,color='red',alpha = 0.5)
+        )
+    tprs = []
+    aucs = []
+    mean_fpr = np.linspace(0,1,100)
+    print(result1)
+    #for i in range(len(result1[3])):
+    fpr, tpr, _ = roc_curve(result1[0], result1[5])
+    with open('fpr'+title[0]+method+'.pickle', 'wb') as handle:
+        pickle.dump(fpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        with open('tpr'+title[0]+method+'.pickle', 'wb') as handle:
+            pickle.dump(tpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    tprs.append(interp(mean_fpr, fpr, tpr))
+    roc_auc = auc(fpr, tpr)
+    aucs.append(roc_auc)
+    #plt.plot(fpr, tpr, lw=2, alpha=0.3, label=' (AUC = %0.2f)' % (roc_auc))
+    
+    plt.plot([0,1],[0,1],linestyle = '--',lw = 2,color = 'black')
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_auc = auc(mean_fpr, mean_tpr)
+    plt.plot(mean_fpr, mean_tpr, color='red',
+            label=r'ROC (AUC = %0.2f )' % (mean_auc),lw=2, alpha=1)
+    
+    plt.xlabel('FPR')
+    plt.ylabel('TPR')
+    plt.title('ROC '+title[0])
+    plt.legend(loc="lower right")
+    plt.text(0.32,0.7,'More accurate area',fontsize = 12)
+    plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
+
+    ax2 = fig1.add_subplot(122,aspect = 'equal')
+    ax2.add_patch(
+        patches.Arrow(0.45,0.5,-0.25,0.25,width=0.3,color='green',alpha = 0.5)
+        )
+    ax2.add_patch(
+        patches.Arrow(0.5,0.45,0.25,-0.25,width=0.3,color='red',alpha = 0.5)
+        )
+    tprs = []
+    aucs = []
+    mean_fpr = np.linspace(0,1,100)
+    #for i in range(len(result2[3])):
+    fpr, tpr, _ = roc_curve(result2[0], result2[5])
+    with open('fpr'+title[1]+method+'.pickle', 'wb') as handle:
+        pickle.dump(fpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        with open('tpr'+title[1]+method+'.pickle', 'wb') as handle:
+            pickle.dump(tpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    tprs.append(interp(mean_fpr, fpr, tpr))
+    roc_auc = auc(fpr, tpr)
+    aucs.append(roc_auc)
+    #plt.plot(fpr, tpr, lw=2, alpha=0.3, label='(AUC = %0.2f)' % (roc_auc))
+    
+    plt.plot([0,1],[0,1],linestyle = '--',lw = 2,color = 'black')
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_auc = auc(mean_fpr, mean_tpr)
+    
+    plt.plot(mean_fpr, mean_tpr, color='blue',
+            label=r'ROC (AUC = %0.2f )' % (mean_auc),lw=2, alpha=1)
+    
+    plt.xlabel('FPR')
+    plt.ylabel('TPR')
+    plt.title('ROC ' + title[1])
+    plt.legend(loc="lower right")
+    plt.text(0.32,0.7,'More accurate area',fontsize = 12)
+    plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
+    '''
+    figsize=(20, 10)
+    
+    ticksize = 14
+    titlesize = ticksize + 8
+    labelsize = ticksize + 5
+
+    params = {'figure.figsize' : figsize,
+            'axes.labelsize' : labelsize,
+            'axes.titlesize' : titlesize,
+            'xtick.labelsize': ticksize,
+            'ytick.labelsize': ticksize}
+
+    plt.rcParams.update(params)
+    fpr_keras1, tpr_keras1, _ = roc_curve(result1[0], result1[5])
+    fpr_keras2, tpr_keras2, _ = roc_curve(result2[0], result2[5])
+    auc_keras1 = auc(fpr_keras1, tpr_keras1)
+    auc_keras2 = auc(fpr_keras2, tpr_keras2)
+    plt.figure(1)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.plot(fpr_keras1, tpr_keras1, label= title[0] +'(area = {:.3f})'.format(auc_keras1))
+    plt.plot(fpr_keras2, tpr_keras2, label= title[1] +'(area = {:.3f})'.format(auc_keras2))
+    plt.xlabel('False positive rate')
+    plt.ylabel('True positive rate')
+    plt.title('ROC curve')
+    plt.legend(loc='best')
+    plt.show()
+
+    plt.savefig('roc2_'+method+'.pdf')
     plt.show()
     plt.close()
 #perform predictions on classification methods
@@ -989,7 +1506,7 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     assert data[1].shape[0] == data[3].shape[0]
     data_in1 = tokenizer(input_data,data[0], data[1])
     
-    print(data_in1[2])
+    #print(data_in1[2])
     data_in2 = padding(data_in1[0], data_in1[1],input_data)
     global MAX_SEQUENCE_LENGTH
     MAX_SEQUENCE_LENGTH = data_in2[0].shape[1]
@@ -1045,7 +1562,7 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     
     start_time = time.time()
     print(date_time(1))
-    model = predict_model(MAX_LEN,embedding_layer[el],ANN,data_in2[0],data_out[0],data2[0],data2[2],dense)
+    model = predict_model(MAX_LEN,embedding_layer[el],ANN,data_in2[0],data_out[0],data_in2[1],data_out[1],1)
     #or
     #model = predict_model(MAX_LEN,embedding_layer[el],ANN,data_train,data_out[0],None,None,dense)
     elapsed_time = time.time() - start_time
@@ -1080,23 +1597,13 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     preds2 = np.argmax(preds2, axis=-1)
     with open('preds1.pickle', 'wb') as handle:
         pickle.dump(preds1, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    
     with open('preds2.pickle', 'wb') as handle:
         pickle.dump(preds2, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    
     with open('test_data1.pickle', 'wb') as handle:
         pickle.dump(datax[3], handle, protocol=pickle.HIGHEST_PROTOCOL)
-    
     with open('test_data2.pickle', 'wb') as handle:
         pickle.dump(datay[3], handle, protocol=pickle.HIGHEST_PROTOCOL)
-    
-    #or
-    #preds2 = model.predict_classes(data_in2[1])
-    '''
-    Call the metrics function
-    '''
 
-  
     test1 = ANN1
     test2 = ANN2
     title = [test1,test2]
@@ -1109,30 +1616,14 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     print("Model Performance of model 2: "+ test2 +" (Test):")
     df_score2=pd.DataFrame.from_records([{'Accuracy':score[1],'Precision':score[2],'Recall':score[3],'F1_score':score[4]}])
     print(df_score2)
-    '''
-    result1 = pd.DataFrame({'model': test1, 'score': accuracy1[1]*100}, index=[-1])
-    result2 = pd.DataFrame({'model': test2, 'score': accuracy2[1]*100}, index=[-1])
-    result = pd.concat([result2, result1.ix[:]]).reset_index(drop=True)
-    plot_model_performace(result)
-    '''
-    #load pickle
     with open('preds1.pickle', 'rb') as handle:
         preds1 = pickle.load(handle)
-    
     with open('preds2.pickle', 'rb') as handle:
         preds2 = pickle.load(handle)
-    
     with open('test_data1.pickle', 'rb') as handle:
         test_data1 = pickle.load(handle)
-    
     with open('test_data2.pickle', 'rb') as handle:
         test_data2 = pickle.load(handle)
-   
-    '''
-    test_data1 = pd.Series(test_data1)
-    test_data2 = pd.Series(test_data2)
-    '''
-    
     #SKLearn Evaluation
     target_class = ['class_0','class_1']
     labels = [0,1]
@@ -1159,6 +1650,23 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     cm2 = metrics.confusion_matrix(y_true=test_data2, y_pred=preds2)
     print(cm2)
     plot_cm(cm1,cm2,method)
+
+    preds3 = model.predict(data1[1],batch_size=13).ravel()
+    preds4 = model1.predict(data3[1],batch_size=13).ravel()
+    fpr_keras1, tpr_keras1, _ = roc_curve(test_data1, preds3)
+    fpr_keras2, tpr_keras2, _ = roc_curve(test_data2, preds4)
+    auc_keras1 = auc(fpr_keras1, tpr_keras1)
+    auc_keras2 = auc(fpr_keras2, tpr_keras2)
+    plt.figure(1)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.plot(fpr_keras1, tpr_keras1, label= test1 +'(area = {:.3f})'.format(auc_keras1))
+    plt.plot(fpr_keras2, tpr_keras2, label= test2 +'(area = {:.3f})'.format(auc_keras2))
+    plt.xlabel('False positive rate')
+    plt.ylabel('True positive rate')
+    plt.title('ROC curve')
+    plt.legend(loc='best')
+    plt.show()
+
     df1.to_csv('prediction1.csv', encoding='utf-8', index=True)
     df2.to_csv('prediction2.csv', encoding='utf-8', index=True)
 def sentences_to_indices(X, word_to_index, maxLen):
@@ -1236,6 +1744,50 @@ def plot_classification_report(array1, array2,title,method, ax=None):
     plt.savefig('classification_report_'+ method +'.pdf')
     plt.show()
     plt.close()
+def plot_classification_report2(array1, array2,title,method, ax=None):
+    plt.figure(figsize=(20, 10))
+    plt.subplot(211)
+    
+    plt.title('Classification Report '+title[0])
+    xticks = ['precision', 'recall', 'f1-score', 'support']
+    yticks = list(np.unique(array1[0]))
+    yticks += ['avg']
+
+    rep = np.array(precision_recall_fscore_support(array1[0], array1[4])).T
+    avg = np.mean(rep, axis=0)
+    avg[-1] = np.sum(rep[:, -1])
+    rep = np.insert(rep, rep.shape[0], avg, axis=0)
+
+    sns.heatmap(rep,
+                annot=True, 
+                cbar=False, 
+                xticklabels=xticks, 
+                yticklabels=yticks,
+                ax=ax)
+
+    plt.subplot(212)
+    
+    plt.title('Classification Report '+title[1])
+    xticks = ['precision', 'recall', 'f1-score', 'support']
+    yticks = list(np.unique(array2[0]))
+    yticks += ['avg']
+
+    rep = np.array(precision_recall_fscore_support(array2[0], array2[4])).T
+    avg = np.mean(rep, axis=0)
+    avg[-1] = np.sum(rep[:, -1])
+    rep = np.insert(rep, rep.shape[0], avg, axis=0)
+
+    sns.heatmap(rep,
+                annot=True, 
+                cbar=False, 
+                xticklabels=xticks, 
+                yticklabels=yticks,
+                ax=ax)
+    
+    
+    plt.savefig('classification_report2_'+ method +'.pdf')
+    plt.show()
+    plt.close()
 #tokenizes the words
 def tokenizer2(train_data, test_data):
     train = fastText.tokenize(train_data)
@@ -1283,9 +1835,8 @@ def plot_performance(history=None, figure_directory=None, ylim_pad=[0, 0]):
     legends = ['Training', 'Validation']
 
     plt.figure(figsize=(20, 10))
-
-    y1 = history.history['f1_score']
-    y2 = history.history['val_f1_score']
+    y1 = history.history['f1_score1']
+    y2 = history.history['val_f1_score1']
 
     min_y = min(min(y1), min(y2))-ylim_pad[0]
     max_y = max(max(y1), max(y2))+ylim_pad[0]
@@ -1414,11 +1965,11 @@ def we_output_data_transform(y_train,y_test,encoding='binary',category=None):
             concated.drop(['pout'], axis=1)
         return concated,labels
     else:
-        le = LabelEncoder()
+        #le = LabelEncoder()
         #y_train_le = le.fit_transform(y_train.values)
         #y_test_le = le.fit_transform(y_test.values)
-        y_train = to_categorical(y_train.values).astype('float32')
-        y_test = to_categorical(y_test.values).astype('float32')
+        y_train = np.array(y_train.values)
+        y_test = np.array(y_test.values)
     result = [y_train,y_test]
     return result
 #embeddings layer
@@ -1552,15 +2103,13 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index,embeddings_index):
     for word, index in word_to_index.items():
         emb_matrix[index, :] = word_to_vec_map[word]
         
-    embedding_layer = Embedding(input_dim = vocab_len, output_dim = emb_dim,
-    mask_zero = False,input_length = MAX_SEQUENCE_LENGTH,trainable=False) 
+    embedding_layer = Embedding(vocab_len, emb_dim,embeddings_initializer=Constant(emb_matrix),
+    input_length = MAX_SEQUENCE_LENGTH,trainable=False) 
 
-    embedding_layer.build(MAX_LEN)
-    embedding_layer.set_weights([emb_matrix])
     
     return embedding_layer
 #bilstm
-def bilstm(input_shape,embedding_layer1,dense):
+def bilstm(embedding_layer1,dense):
     model = Sequential()
     model.add(embedding_layer1)
     model.add(Bidirectional(LSTM(300)))
@@ -1572,7 +2121,7 @@ def bilstm(input_shape,embedding_layer1,dense):
     model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy',precision,recall,f1_score])
     print(model.summary())
     return model
-def cnn2(input_shape,embedding_layer1,dense):
+def cnn2(embedding_layer1,dense):
     
     model = Sequential()
     model.add(embedding_layer1)
@@ -1588,7 +2137,7 @@ def cnn2(input_shape,embedding_layer1,dense):
     model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy',precision,recall,f1_score])
     print(model.summary())
     return model
-def cnn1(input_shape,embedding_layer1,dense):
+def cnn1(embedding_layer1,dense):
     
     model = Sequential()
     model.add(embedding_layer1)
@@ -1603,36 +2152,41 @@ def cnn1(input_shape,embedding_layer1,dense):
     model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy',precision,recall,f1_score])
     print(model.summary())
     return model
-def gru_model(input_shape,embedding_layer1,dense):
+def gru_model(embedding_layer1,dense):
+    
     
     model = Sequential()
     model.add(embedding_layer1)
     model.add(GRU(117))
+    #model.add(ELU(alpha=1.0))
     #model.add(Dense(234))
     #model.add(Dense(3))
+    model.add(LeakyReLU(alpha=0.01))
     model.add(Dense(dense))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     #adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics = ['accuracy',precision,recall,f1_score])
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics = ['accuracy',precision,recall,f1_score1])
     print(model.summary())
     
     return model
-def lstm_model(input_shape,embedding_layer1,dense):
+def lstm_model(embedding_layer1,dense):
     
     model = Sequential()
     model.add(embedding_layer1)
     model.add(LSTM(117))
+    #model.add(ELU(alpha=1.0))
     #model.add(Dense(234,activation='elu',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
     #model.add(Dense(3,activation='elu'))
+    model.add(LeakyReLU(alpha=0.01))
     model.add(Dense(dense))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     #adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score])
+    model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score1])
     print(model.summary())
     
     return model
     #from https://www.kaggle.com/sakarilukkarinen/embedding-lstm-gru-and-conv1d/versions
-def gru_model2(input_shape,embedding_layer1,dense):
+def gru_model2(embedding_layer1,dense):
 
     model = Sequential()
     model.add(embedding_layer1)
@@ -1655,110 +2209,166 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
     #kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=seed)
     #loss = 'categorical_crossentropy'
     if model_type == 'cnn1':
-        model = cnn1((input_shape,),embedding_layer,dense)
-        #model.compile(loss=loss,optimizer=adam,metrics=['acc'])
-        #for train, test in kfold.split(X, Y):
-        track = model.fit(X_train, y_train, batch_size=13, epochs=20, verbose=1,validation_data=(X_val, y_val))
-        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
+        
         '''
-        model.fit_generator(generator=batch_generator(X_train, y_train, 32),
-                    epochs=5,validation_data=(X_val, y_val),
-                    steps_per_epoch=X_train.shape[0]/32)
+        a=0
+        b=0
+        c=0
+        d=0
+        e=0
+        f=0
+        g=0
+        h=0
+        i=0
+        j=0
+        batch_size1 = [100, 200, 400, 600, 800, 1000,2000,2500]
+        epochs1 = [1,2,3,4,5,6,7,8]
+        optimizer1 = ['SGD', 'RMSprop', 'Adagrad', 'Adadelta', 'Adam', 'Adamax', 'Nadam','Adam']
+        learn_rate1 = [0.001,0.002,0.005, 0.01,0.015, 0.1, 0.2, 0.3]
+        momentum1 = [0.0, 0.2,0.3, 0.4,0.5, 0.6, 0.8, 0.9]
+        init_mode1 = ['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+        activation1 = ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+        weight_constraint1 = [1,1.5, 2,2.5, 3,3.5, 4, 5]
+        dropout_rate1 = [0.001,0.1,0.11,0.15, 0.2, 0.3, 0.4, 0.5]
+        neurons1 = [50, 100, 150, 200, 250, 300, 350,400]
+        model = cnn1(embedding_layer,dense,optimizer1[a],learn_rate1[b],momentum1[c],init_mode1[d],activation1[e],weight_constraint1[f],dropout_rate1[g],neurons1[h])
+        track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
-        #plot_function(track)
-        '''
-        [9] https://towardsdatascience.com/another-twitter-sentiment-analysis-with-python-part-9-neural-networks-with-tfidf-vectors-using-d0b4af6be6d7
-        By Ricky Kim, Another Twitter sentiment analysis with Python — Part 9 (Neural Networks with Tfidf vectors using Keras)
-        scores = model.evaluate(X[test], Y[test], verbose=0)
-	    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
-	    cvscores.append(scores[1] * 100)
-        '''
+        model = cnn1(embedding_layer,dense)
+        track = model.fit(X_train, y_train, batch_size=13, epochs=20, verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         plot_performance(track)
     elif model_type == 'cnn2':
-        model = cnn2((input_shape,),embedding_layer,dense)
-        #model1.compile(loss=loss,optimizer=adam,metrics=['acc'])
-        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
-        track = model.fit(X_train, y_train, batch_size=13, epochs=20, verbose=1,validation_data=(X_val, y_val))
         '''
-        model.fit_generator(generator=batch_generator(X_train, y_train, 32),
-                    epochs=5,validation_data=(X_val, y_val),
-                    steps_per_epoch=X_train.shape[0]/32)
+        a=0
+        b=0
+        c=0
+        d=0
+        e=0
+        f=0
+        g=0
+        h=0
+        i=0
+        j=0
+        batch_size1 = [100, 200, 400, 600, 800, 1000,2000,2500]
+        epochs1 = [1,2,3,4,5,6,7,8]
+        optimizer1 = ['SGD', 'RMSprop', 'Adagrad', 'Adadelta', 'Adam', 'Adamax', 'Nadam','Adam']
+        learn_rate1 = [0.001,0.002,0.005, 0.01,0.015, 0.1, 0.2, 0.3]
+        momentum1 = [0.0, 0.2,0.3, 0.4,0.5, 0.6, 0.8, 0.9]
+        init_mode1 = ['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+        activation1 = ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+        weight_constraint1 = [1,1.5, 2,2.5, 3,3.5, 4, 5]
+        dropout_rate1 = [0.001,0.1,0.11,0.15, 0.2, 0.3, 0.4, 0.5]
+        neurons1 = [50, 100, 150, 200, 250, 300, 350,400]
+        model = cnn2(embedding_layer,dense,optimizer1[a],learn_rate1[b],momentum1[c],init_mode1[d],activation1[e],weight_constraint1[f],dropout_rate1[g],neurons1[h])
+        track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
-        #plot_function(track2)
-        '''
-        scores = model.evaluate(X[test], Y[test], verbose=0)
-	    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
-	    cvscores.append(scores[1] * 100)
-        '''
+        model = cnn2(embedding_layer,dense)
+        track = model.fit(X_train, y_train, batch_size=13, epochs=20, verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         plot_performance(track)
     elif model_type == 'lstm':
-        model = lstm_model((input_shape,),embedding_layer,dense)
-        #The model has already been compiled in the function call
-        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
-        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=False,validation_data=(X_val, y_val))
         '''
-        model.fit_generator(generator=batch_generator(X_train, y_train, 32),
-                    epochs=5,validation_data=(X_val, y_val),
-                    steps_per_epoch=X_train.shape[0]/32)
+        a=0
+        b=0
+        c=0
+        d=0
+        e=0
+        f=0
+        g=0
+        h=0
+        epochs1 = [1,2,3,4,5,6,7,8]
+        optimizer1 = ['SGD', 'RMSprop', 'Adagrad', 'Adadelta', 'Adam', 'Adamax', 'Nadam','Adam']
+        learn_rate1 = [0.001,0.002,0.005, 0.01,0.015, 0.1, 0.2, 0.3]
+        momentum1 = [0.0, 0.2,0.3, 0.4,0.5, 0.6, 0.8, 0.9]
+        init_mode1 = ['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+        activation1 = ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+        weight_constraint1 = [1,1.5, 2,2.5, 3,3.5, 4, 5]
+        dropout_rate1 = [0.001,0.1,0.11,0.15, 0.2, 0.3, 0.4, 0.5]
+        neurons1 = [50, 100, 150, 200, 250, 300, 350,400]
+        model = lstm_model(embedding_layer,dense,optimizer1[a],learn_rate1[b],momentum1[c],init_mode1[d],activation1[e],weight_constraint1[f],dropout_rate1[g],neurons1[h])
+        track = model.fit(X_train, y_train, validation_steps=2, steps_per_epoch=2, batch_size=13, epochs=10, verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
-        #plot_function(track)
-        '''
-        scores = model.evaluate(X[test], Y[test], verbose=0)
-	    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
-	    cvscores.append(scores[1] * 100)
-        '''
+        model = lstm_model(embedding_layer,dense)
+        track = model.fit(X_train, y_train, epochs=10,validation_steps=2, steps_per_epoch=1,batch_size=None,verbose=1,shuffle=False,validation_data=(X_val, y_val),callbacks=callbacks)
         plot_performance(track)
     elif model_type == 'bilstm':
-        model = bilstm((input_shape,),embedding_layer,dense)
-        #The model has already been compiled in the function call
-        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
-        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=False,validation_data=(X_val, y_val))
         '''
-        model.fit_generator(generator=batch_generator(X_train, y_train, 32),
-                    epochs=5,validation_data=(X_val, y_val),
-                    steps_per_epoch=X_train.shape[0]/32)
+        a=0
+        b=0
+        c=0
+        d=0
+        e=0
+        f=0
+        g=0
+        h=0
+        optimizer1 = ['SGD', 'RMSprop', 'Adagrad', 'Adadelta', 'Adam', 'Adamax', 'Nadam','Adam']
+        learn_rate1 = [0.001,0.002,0.005, 0.01,0.015, 0.1, 0.2, 0.3]
+        momentum1 = [0.0, 0.2,0.3, 0.4,0.5, 0.6, 0.8, 0.9]
+        init_mode1 = ['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+        activation1 = ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+        weight_constraint1 = [1,1.5, 2,2.5, 3,3.5, 4, 5]
+        dropout_rate1 = [0.001,0.1,0.11,0.15, 0.2, 0.3, 0.4, 0.5]
+        neurons1 = [50, 100, 150, 200, 250, 300, 350,400]
+        model = bilstm(embedding_layer,dense,optimizer1[a],learn_rate1[b],momentum1[c],init_mode1[d],activation1[e],weight_constraint1[f],dropout_rate1[g],neurons1[h])
+        track = model.fit(X_train, y_train, validation_steps=2, steps_per_epoch=2, batch_size=none, epochs=10, verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
-        #plot_function(track)
-        '''
-        scores = model.evaluate(X[test], Y[test], verbose=0)
-	    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
-	    cvscores.append(scores[1] * 100)
-        '''
+        model = bilstm(embedding_layer,dense)
+        track = model.fit(X_train, y_train, epochs=20, validation_steps=2, steps_per_epoch=2,batch_size=None,verbose=1,shuffle=False,validation_data=(X_val, y_val),callback=callbacks)
         plot_performance(track)
     elif model_type == 'gru':
-        model = gru_model((input_shape,),embedding_layer,dense)
-        #The model has already been compiled in the function call
-        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
-        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=False,validation_data=(X_val, y_val))
         '''
-        model.fit_generator(generator=batch_generator(X_train, y_train, 32),
-                    epochs=5,validation_data=(X_val, y_val),
-                    steps_per_epoch=X_train.shape[0]/32)
+        a=0
+        b=0
+        c=0
+        d=0
+        e=0
+        f=0
+        g=0
+        h=0
+        i=0
+        j=0
+        batch_size1 = [100, 200, 400, 600, 800, 1000,2000,2500]
+        epochs1 = [1,2,3,4,5,6,7,8]
+        optimizer1 = ['SGD', 'RMSprop', 'Adagrad', 'Adadelta', 'Adam', 'Adamax', 'Nadam','Adam']
+        learn_rate1 = [0.001,0.002,0.005, 0.01,0.015, 0.1, 0.2, 0.3]
+        momentum1 = [0.0, 0.2,0.3, 0.4,0.5, 0.6, 0.8, 0.9]
+        init_mode1 = ['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+        activation1 = ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+        weight_constraint1 = [1,1.5, 2,2.5, 3,3.5, 4, 5]
+        dropout_rate1 = [0.001,0.1,0.11,0.15, 0.2, 0.3, 0.4, 0.5]
+        neurons1 = [50, 100, 150, 200, 250, 300, 350,400]
+        model = gru_model(embedding_layer,dense,optimizer1[a],learn_rate1[b],momentum1[c],init_mode1[d],activation1[e],weight_constraint1[f],dropout_rate1[g],neurons1[h])
+        track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
-        #plot_function(track)
-        '''
-        scores = model.evaluate(X[test], Y[test], verbose=0)
-	    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
-	    cvscores.append(scores[1] * 100)
-        '''
+        model = gru_model(embedding_layer,dense)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=1000,verbose=1,shuffle=False,validation_data=(X_val, y_val),callbacks=callbacks)
         plot_performance(track)
-        
     else:
-        model = gru_model2((input_shape,),embedding_layer,dense)
-        #track = model.fit(X_train[train], y_train[train], batch_size=13, epochs=40, verbose=1,validation_data=(X_val, y_val))
-        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=False,validation_data=(X_val, y_val))
         '''
-        model.fit_generator(generator=batch_generator(X_train, y_train, 32),
-                    epochs=5,validation_data=(X_val, y_val),
-                    steps_per_epoch=X_train.shape[0]/32)
+        a=0
+        b=0
+        c=0
+        d=0
+        e=0
+        f=0
+        g=0
+        h=0
+        i=0
+        j=0
+        batch_size1 = [100, 200, 400, 600, 800, 1000,2000,2500]
+        epochs1 = [1,2,3,4,5,6,7,8]
+        optimizer1 = ['SGD', 'RMSprop', 'Adagrad', 'Adadelta', 'Adam', 'Adamax', 'Nadam','Adam']
+        learn_rate1 = [0.001,0.002,0.005, 0.01,0.015, 0.1, 0.2, 0.3]
+        momentum1 = [0.0, 0.2,0.3, 0.4,0.5, 0.6, 0.8, 0.9]
+        init_mode1 = ['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+        activation1 = ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+        weight_constraint1 = [1,1.5, 2,2.5, 3,3.5, 4, 5]
+        dropout_rate1 = [0.001,0.1,0.11,0.15, 0.2, 0.3, 0.4, 0.5]
+        neurons1 = [50, 100, 150, 200, 250, 300, 350,400]
+        model = gru_model2(embedding_layer,dense,optimizer1[a],learn_rate1[b],momentum1[c],init_mode1[d],activation1[e],weight_constraint1[f],dropout_rate1[g],neurons1[h])
+        track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
-        #plot_function(track)
-        '''
-        scores = model.evaluate(X[test], Y[test], verbose=0)
-	    print("%s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
-	    cvscores.append(scores[1] * 100)
-        '''
-        
+        model = gru_model2(embedding_layer,dense)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=False,validation_data=(X_val, y_val),callback=callbacks)
         plot_performance(track)
     #print("%.2f%% (+/- %.2f%%)" % (numpy.mean(cvscores), numpy.std(cvscores)))
     #model = None
@@ -1818,12 +2428,10 @@ def parallelize_dataframe(df, func):
     return df
 #to call the function above, do this: parallelize_dataframe(df, cleaning), then pickle
 #from https://stackoverflow.com/questions/43547402/how-to-calculate-f1-macro-in-keras, visited 26th may
-def f1_score(y_true, y_pred):
+def f1_score1(y_true, y_pred):
     def recall(y_true, y_pred):
         """Recall metric.
-
         Only computes a batch-wise average of recall.
-
         Computes the recall, a metric for multi-label classification of
         how many relevant items are selected.
         """
@@ -1834,9 +2442,7 @@ def f1_score(y_true, y_pred):
 
     def precision(y_true, y_pred):
         """Precision metric.
-
         Only computes a batch-wise average of precision.
-
         Computes the precision, a metric for multi-label classification of
         how many selected items are relevant.
         """
@@ -1849,9 +2455,7 @@ def f1_score(y_true, y_pred):
     return 2*((precision*recall)/(precision+recall+K.epsilon()))
 def recall(y_true, y_pred):
     """Recall metric.
-
     Only computes a batch-wise average of recall.
-
     Computes the recall, a metric for multi-label classification of
     how many relevant items are selected.
     """
@@ -1861,9 +2465,7 @@ def recall(y_true, y_pred):
     return recall
 def precision(y_true, y_pred):
     """Precision metric.
-
     Only computes a batch-wise average of precision.
-
     Computes the precision, a metric for multi-label classification of
     how many selected items are relevant.
     """

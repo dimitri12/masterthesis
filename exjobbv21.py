@@ -9,40 +9,60 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.cm as cmx
 import re
+import scipy as sp
 import io
 from numpy import array
 import pandas as pd
 import numpy as np
+#from wordcloud import WordCloud
+import sklearn.metrics
+import sklearn
 from sklearn.model_selection import cross_val_predict
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.preprocessing import OneHotEncoder, scale 
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
+from keras.layers import LeakyReLU
+from keras.layers import ELU
 from sklearn.metrics import log_loss, accuracy_score
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import make_scorer, f1_score, precision_score, recall_score
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn import tree
 from sklearn.svm import SVC
+import multiprocessing
+from sklearn.model_selection import learning_curve
+from multiprocessing import Pool
 from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 import gensim
+from keras.initializers import Constant
+import keras.backend as K
 import nltk
+from keras.wrappers.scikit_learn import KerasClassifier
+from nltk.corpus import stopwords
 #import scikitplot.plotters as skplt
-from xgboost import XGBClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
 from keras.utils.np_utils import to_categorical
 from keras.models import Sequential
 from keras.models import Model
-from keras.layers import Dense, Embedding, LSTM, SpatialDropout1D
-from keras.utils.np_utils import to_categorical
+from keras.layers import Dense, Embedding, LSTM, SpatialDropout1D, Activation, LeakyReLU, PReLU, ELU, ThresholdedReLU
+from keras.utils import to_categorical
 from keras.callbacks import ModelCheckpoint
 from keras.models import load_model
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from keras.optimizers import Adam
+from keras.constraints import unit_norm
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.naive_bayes import GaussianNB
-from sklearn.svm import LinearSVC
+from sklearn.naive_bayes import GaussianNB, BernoulliNB
+from keras.constraints import maxnorm
+from sklearn.svm import LinearSVC,SVC
 from sklearn.ensemble import VotingClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelBinarizer
@@ -55,11 +75,14 @@ from keras import models
 from keras import layers
 from keras import regularizers
 from gensim.models import FastText
-from keras.layers import Dense, Input, LSTM, GRU, Conv1D, MaxPooling1D, Dropout, Concatenate, Conv2D, MaxPooling2D, concatenate
+from keras.layers import Dense, Input, LSTM, GRU, Conv1D, MaxPooling1D, Dropout, Concatenate, Conv2D, MaxPooling2D, concatenate,BatchNormalization, Bidirectional
 from keras.initializers import glorot_uniform
 from gensim.models.keyedvectors import KeyedVectors
 from keras.layers.core import Reshape, Flatten
 from keras.callbacks import EarlyStopping
+from keras.activations import relu
+from keras.optimizers import SGD
+from sklearn.metrics import make_scorer, accuracy_score
 from sklearn.exceptions import DataConversionWarning
 from sklearn.feature_extraction.text import TfidfTransformer
 import seaborn as sns
@@ -69,21 +92,31 @@ from gensim.models.wrappers import FastText
 import matplotlib.patches as patches
 import time
 import datetime
+#import fastText
+from gensim.models import word2vec
 import warnings
 import pickle
+from sklearn.manifold import TSNE
+from collections import Counter
+import string
+import operator 
 warnings.filterwarnings(action='ignore', category=DataConversionWarning)
 warnings.filterwarnings(action='ignore', category=FutureWarning)
 warnings.filterwarnings(action='ignore')
 
+num_partitions = multiprocessing.cpu_count()
+num_cores = multiprocessing.cpu_count()
 #Global Variables from [7] and others
-NB_WORDS = 20  # Parameter indicating the number of words we'll put in the dictionary (to Douglas: i modified this, it was 10000 before)
-VAL_SIZE = 10  # Size of the validation set (originally 1000)
-NB_START_EPOCHS = 20  # Number of epochs we usually start to train with
+NB_WORDS = 4037069  # Parameter indicating the number of words we'll put in the dictionary 
+
+VAL_SIZE = 9  # Size of the validation set (originally 1000)
+NB_START_EPOCHS = 8  # Number of epochs we usually start to train with
 BATCH_SIZE = 512  # Size of the batches used in the mini-batch gradient descent
-MAX_LEN = 19  # Maximum number of words in a sequence
+MAX_LEN = 134  # Maximum number of words in a sequence
+#MAX_LEN = 62
 GLOVE_DIM = 50  # Number of dimensions of the GloVe word embeddings
-MAX_SEQUENCE_LENGTH = 30
-MAX_NB_WORDS = 20000
+MAX_SEQUENCE_LENGTH = 860
+MAX_NB_WORDS = 4037069
 EMBEDDING_DIM = 100
 VALIDATION_SPLIT = 0.1
 #activation function
@@ -92,161 +125,86 @@ re_weight = True
 #dimension for fasttext
 DIM = 300
 #dimension for word2vec
-embed_dim = 128
+embed_dim = 256
 lstm_out = 196
+dim = 50
 filter_sizes = [3,4,5]
 num_filters = 100
 drop = 0.5
+maxLen = 60
+kernel_size = 5
+filters = 64
+pool_size = 4
+lstm_output_size = 70
+#model2 = fastText.train_supervised('./fasttext_train.txt',label='label_', epoch=20, dim=200)
 
-def create_labels_list(df):
-    labels = list(df)
-    return labels
+def cleaning(s):
+    s = str(s)
+    s = s.lower()
+    s = re.sub(r'\s\W',' ',s)
+    s = re.sub(r'\W,\s',' ',s)
+    s = re.sub(r'[^\w]', ' ', s)
+    s = re.sub(r"\d+", "", s)
+    s = re.sub(r'\s+',' ',s)
+    s = re.sub(r'[!@#$_]', '', s)
+    s = s.replace("co","")
+    s = s.replace("https","")
+    s = s.replace(",","")
+    s = s.replace("[\w*"," ")
+    
+    return s
+def clean_text(txt):
+    txt = "".join(v for v in txt if v not in string.punctuation).lower()
+    txt = txt.encode("utf8").decode('utf8', 'ignore')
+    return txt
 
-def doBinary1(df):
-    gender = df.Gender
-    LCN = df.LastContactN
-    hosp_ed = df.hosp_ed
-    hosp_admit = df.hosp_admit
-    hosp_icu = df.hosp_icu
-    multiclass = 'no'
-    array = [gender,LCN,hosp_ed,hosp_admit,hosp_icu,multiclass]
-    return array
+def build_corpus(data):
+    "Creates a list of lists containing words from each sentence"
+    data['FreeText'] = [cleaning(s) for s in data['FreeText']]
+    corpus = []
+    for col in ['FreeText']:
+        for sentence in data[col].iteritems():
+            word_list = sentence[1].split(" ")
+            corpus.append(word_list)
+    
+    with open('corpus.pickle', 'wb') as handle:
+        pickle.dump(corpus, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    return corpus
+def tsne_plot(df):
+    corpus = build_corpus(df)
+    
+    model = word2vec.Word2Vec(corpus, size=100, window=20, min_count=1, workers=4)
+    with open('w2vmodel.pickle', 'wb') as handle:
+        pickle.dump(model, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    #model.most_similar('')
+    "Creates and TSNE model and plots it"
+    labels = []
+    tokens = []
 
-def doBinary1part2(input_data,df):
-    array = doBinary1(df)
-    acc = []
-    loss = []
-    multiclass = array[5]
-    array.pop(5)
-    input_data = pre_processing1(input_data,df)
-    #or
-    #input_data = pre_processing2(input_data)
-    for x in range(len(array)):
-        output_data = df[array[x]]
-        bag_of_words2 = text_processing(input_data,output_data, None, 1)
-        tf_idf2 = text_processing(input_data,output_data, "tfidf", 1)
-        data_array = [bag_of_words2,tf_idf2]
-        result = clf_predictor(data_array,multiclass)
-        acc.append(result[0])
-        loss.append(result[1])
-    result = [acc,loss]
-    return result
+    for word in model.wv.vocab:
+        tokens.append(model[word])
+        labels.append(word)
+    
+    tsne_model = TSNE(perplexity=40, n_components=2, init='pca', n_iter=2500, random_state=23)
+    new_values = tsne_model.fit_transform(tokens)
 
-def doMultiClasspart2(input_data,df):
-    #output data
-    array = doMultiClass(df)
-    acc = []
-    loss = []
-    multiclass = array[5]
-    array.pop(5)
-    input_data = pre_processing1(input_data,df)
-    #or
-    #input_data = pre_processing2(input_data)
-    for x in range(len(array)):
-        output_data = df[array[x]]
-        bag_of_words2 = text_processing(input_data,output_data, None, 1)
-        tf_idf2 = text_processing(input_data,output_data, "tfidf", 1)
-        data_array = [bag_of_words2,tf_idf2]
-        result = clf_predictor(data_array,multiclass)
-        acc.append(result[0])
-        loss.append(result[1])
-    result = [acc,loss]
-    return result
+    x = []
+    y = []
+    for value in new_values:
+        x.append(value[0])
+        y.append(value[1])
+        
+    plt.figure(figsize=(16, 16)) 
+    for i in range(len(x)):
+        plt.scatter(x[i],y[i])
+        plt.annotate(labels[i],
+                     xy=(x[i], y[i]),
+                     xytext=(5, 2),
+                     textcoords='offset points',
+                     ha='right',
+                     va='bottom')
+    plt.show()
 
-def doMultiClass(df):
-    pout= df.pout
-    prio = df.prio
-    operator = df.operator
-    agecat = df.AgeCat
-    lcdcat = df.LcdCat
-    multiclass = 'yes'
-    array = [pout,prio,operator,agecat,lcdcat,multiclass]
-    return array
-
-#this function will predict all the hexadecimal labeled values
-def doBinary2(input_data,df,labels):
-    acc = []
-    loss = []
-    multiclass = 'no'
-    input_data = pre_processing1(input_data,df)
-    #or
-    #input_data = pre_processing2(input_data)
-    for x in range(len(labels)):
-        output_data = df[labels[x]]
-        bag_of_words2 = text_processing(input_data,output_data, None, 1)
-        tf_idf2 = text_processing(input_data,output_data, "tfidf", 1)
-        data_array = [bag_of_words2,tf_idf2]
-        result = clf_predictor(data_array,multiclass)
-        acc.append(result[0])
-        loss.append(result[1])
-    result = [acc,loss]
-    return result
-'''
-ANNs:
-1.CNN1
-2.CNN2
-3.LSTM
-4.GRU
-5.GRU2
-6. Default (write None)
-
-embedding layers:
-0: Word2Vec
-1: fasttext (self made)
-2: fasttext downloaded from the fasttext web page
-'''
-def doBinary1part3(input_data,df):
-    #embedding layer index 'el' in short
-    el = 0
-    ANN = 'cnn1'
-    array = doBinary1(df)
-    #removing the multiclass variable
-    array.pop(5)
-    #5 binary data
-    output_data = df[array[4]]
-    dense = 2
-    embedded = word_embeddings(input_data, output_data ,ANN,dense,el)
-    ANN2 = 'cnn2'
-    embedded1 = word_embeddings(input_data, output_data ,ANN2,dense,el)
-    '''
-    result = we_evaluation(embedded[0],embedded1[0],embedded[1],embedded[2])
-    print("Result from 1st prediction: "+ result[0]+"")
-    print("Result from 2nd prediction: "+ result[1]+"")
-    '''
-def doBinary2part2(input_data,df,labels):
-    #embedding layer index 'el' in short
-    el = 0
-    ANN = 'cnn1'
-    #label length is 30
-    output_data = df[labels[29]]
-    dense=2
-    embedded = word_embeddings(input_data, output_data ,ANN,dense,el)
-    ANN2 = 'cnn2'
-    embedded1 = word_embeddings(input_data, output_data ,ANN2,dense,el)
-    '''
-    result = we_evaluation(embedded[0],embedded1[0],embedded[1],embedded[2])
-    print("Result from 1st prediction: "+ result[0]+"")
-    print("Result from 2nd prediction: "+ result[1]+"")
-    '''
-
-def doMultiClasspart3(input_data,df):
-    #embedding layer index 'el' in short
-    el = 0
-    ANN = 'cnn1'
-    array = doMultiClass(df)
-    array.pop(5)
-    #array length is 5
-    #the indexes in array and dense must match otherwise we will get errors
-    output_data = df[array[4]]
-    dense =[5,5,6,6,3]
-    embedded = word_embeddings(input_data, output_data ,ANN,dense[4],el)
-    ANN2 = 'cnn2'
-    embedded1 = word_embeddings(input_data, output_data ,ANN2,dense[4],el)
-    '''
-    result = we_evaluation(embedded[0],embedded1[0],embedded[1],embedded[2])
-    print("Result from 1st prediction: "+ result[0]+"")
-    print("Result from 2nd prediction: "+ result[1]+"")
-    '''
 def transformAge(df):
     '''
     This function will categorise the age data into 5 different age categories
@@ -287,7 +245,7 @@ def transformLCD(df):
 def test_code(input):
     print("Hello " + input)
 
-def eda(df):
+def eda1(df):
     figsize=(20, 10)
     
     ticksize = 14
@@ -380,11 +338,47 @@ def eda(df):
 
     plt.plot()
     plt.show()
+def eda2(df):
+    #max number of words in a sentence
+    df1 = pd.DataFrame(df)
+    df1['FreeText_count'] = df['freetext'].astype(str).apply(lambda x: Counter(x.split(' ')))
+    LEN = df1['FreeText_count'].apply(lambda x : sum(x.values()))
+    max_LEN = max(LEN)
+    global MAX_LEN
+    MAX_LEN = max_LEN
+    print("MAX_LEN is:")
+    print(max_LEN)
+    #length of sequence
+    df["FreeText_len"] = df["freetext"].astype(str).apply(lambda x: len(x))
+    #maximum number of sequence length
+    #print(df["FreeText_len"].max())
+    df["FreeText_len"].hist(figsize = (15, 10), bins = 100)
+    plt.show()
+    global MAX_SEQUENCE_LENGTH
+    MAX_SEQUENCE_LENGTH = df["FreeText_len"].max()
+    print("MAX_SEQUENCE_LENGTH is:")
+    print(MAX_SEQUENCE_LENGTH)
+    global NB_WORDS
+    NB_WORDS = df['FreeText_len'].sum()
+    print("NB_WORDS is:")
+    print(NB_WORDS)
+    #word EDA
+    dummies2 = df.iloc[:,1:2]
+    #tsne_plot(dummies2)
+    #wordcloud
+    df['FreeText'] = [cleaning(s) for s in df['freetext'].astype(str)]
+    #input_data = df['freetext']
+    #word_cloud(input_data)
+    #with open('corpus.pickle', 'rb') as handle:
+        #corpus = pickle.load(handle)
+    #xt = np.concatenate(corpus)
+    #plt.figure(figsize=(20,10))
+    #pd.value_counts(xt).plot(kind="barh")
+    #plt.show()
 
 #preprocessing function. use the dummies as input
 def pre_processing1(input,df):
     sentence = [None] * df.shape[0]
-    input.replace('.', '')
     for i in range(len(sentence)):
         old_sentence = input.iloc[i]
         word = list(old_sentence.split())
@@ -394,14 +388,12 @@ def pre_processing1(input,df):
         words1 = [x for x in words if x is not None]
         sentence.append(' '.join(words1))
         sentence1 = [x for x in sentence if x is not None]
-    values = [str(x) for x in sentence1]
-    #values = array(sentence1)
+    values = array(sentence1)
     return values
-
 #this methods is courtesy from [1], it is an alternative preprocessing method that also uses stop words removal and normalization (in the main section)
 def pre_processing2(input):
     #np.vectorize(input)
-    dummies1=re.sub(r"\W+", " ", input)
+    dummies1=re.sub(r"\w+", " ", input)
     pattern = r"[{}]".format(",.;")
     dummies1=re.sub(pattern, "", input)
     #lower casing
@@ -415,7 +407,6 @@ def pre_processing2(input):
     filtered_tokens = [token for token in tokens if token not in stop_word_list]
     result = ' '.join(filtered_tokens)
     return result
-
 #this function is used to transform string data into float data: e.g. Pout (String) to NewPout (float) using a scoring method where the highest value is the highest priority
 def transform_output_data(output_dataframe,datatype=None):
     
@@ -486,6 +477,7 @@ def text_processing(input_data, output_data, processing_method=None, truncated=N
         #one of these alternatives can be used but it depends on the classification result
         #[2]
         #Alternative 1 from [2]
+        '''
         #try to use aside from word: char or char_wb
         bag_of_words_vector = CountVectorizer(analyzer="word")
         bag_of_words_matrix = bag_of_words_vector.fit_transform(input_data)
@@ -493,11 +485,11 @@ def text_processing(input_data, output_data, processing_method=None, truncated=N
         bag_of_words_matrix = bag_of_words_matrix.toarray()
         '''
         #Alternative 2
-        bag_of_words_vector = CountVectorizer(min_df = 0.0, max_df = 1.0, ngram_range=(2,2))
+        bag_of_words_vector = CountVectorizer(min_df = 0.0, max_df = 1.0, ngram_range=(1,1))
         bag_of_words_matrix = bag_of_words_vector.fit_transform(input_data)
         #denna är viktig
         bag_of_words_matrix = bag_of_words_matrix.toarray()
-        '''
+        
         #using LSA: Latent Semantic Analysis or LSI
         if truncated == 1:
             svd = TruncatedSVD(n_components=25, n_iter=25, random_state=12)
@@ -507,23 +499,23 @@ def text_processing(input_data, output_data, processing_method=None, truncated=N
         result = feature_engineering(bag_of_words_matrix,output_data)
         return result
     elif processing_method =='tfidf':
-        
+        '''
         #[2]
         Tfidf_Vector = TfidfVectorizer(analyzer="char_wb")    
         Tfidf_Matrix = Tfidf_Vector.fit_transform(input_data)
         Tfidf_Matrix = Tfidf_Matrix.toarray()
-        '''
+        
         #Alternative 2 from [1]
         Tfidf_Vector = TfidfVectorizer(min_df = 0., max_df = 1., use_idf = True)
         Tfidf_Matrix = Tfidf_Vector.fit_transform(input_data)
         Tfidf_Matrix = Tfidf_Matrix.toarray()
-        
+        '''
         
         #Alternative 3
         Tfidf_Vector = TfidfVectorizer(min_df=0.0, max_df=1.0, ngram_range=(1,1), sublinear_tf=True)
         Tfidf_Matrix = Tfidf_Vector.fit_transform(input_data)
         Tfidf_Matrix = Tfidf_Matrix.toarray()
-        '''
+    
        
         
         if truncated == 1:
@@ -599,30 +591,41 @@ def feature_engineering(input_data, output_data):
     result = [X_train, X_test, y_train, y_test]
     return result
 def predictor(data_array,method,multiclass):
-    if method == 'NBGauss':
+    if method == 'NBG':
         NBGres_BoW = initiate_predictions(data_array[0],method,multiclass)
         NBGres_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [NBGres_BoW,NBGres_tfidf]
-    elif method == 'NBMulti':
+        return result
+    elif method == 'NBM':
         NBMres_BoW = initiate_predictions(data_array[0],method,multiclass)
         NBMres_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [NBMres_BoW,NBMres_tfidf]
+        return result
     elif method == 'SVM':
         SVMres_BoW = initiate_predictions(data_array[0],method,multiclass)
         SVMres_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [SVMres_BoW,SVMres_tfidf]
-    elif method == 'RF':
-        RFres_BoW = initiate_predictions(data_array[0],method,multiclass)
-        RFres_tfidf = initiate_predictions(data_array[1],method,multiclass)
-        result = [RFres_BoW,RFres_tfidf]
+        return result
     elif method == 'ensemble':
         res_BoW = initiate_predictions(data_array[0],method,multiclass)
         res_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [res_BoW,res_tfidf]
-    elif method == 'gb':
+        return result
+    elif method == 'RF':
+        RFres_BoW = initiate_predictions(data_array[0],method,multiclass)
+        RFres_tfidf = initiate_predictions(data_array[1],method,multiclass)
+        result = [RFres_BoW,RFres_tfidf]
+        return result
+    elif method == 'tree':
+        treeres_BoW = initiate_predictions(data_array[0],method,multiclass)
+        treeres_tfidf = initiate_predictions(data_array[1],method,multiclass)
+        result = [treeres_BoW,treeres_tfidf]
+        return result
+    elif method == 'GB':
         GBres_BoW = initiate_predictions(data_array[0],method,multiclass)
         GBres_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [GBres_BoW,GBres_tfidf]
+        return result
     else:
         logres_BoW = initiate_predictions(data_array[0],method,multiclass)
         logres_tfidf = initiate_predictions(data_array[1],method,multiclass)
@@ -631,65 +634,91 @@ def predictor(data_array,method,multiclass):
     return result
 #[6] prediction using the processed data
 def generate_metrics(result,clf=None):
+    title = ['Bow','TFIDF']
     if clf == 'NBG':
-        val = 'Naive Bayes Gaussian'
+        val = 'Naive_Bayes_Gaussian'
     elif clf == 'NBM':
-        val = 'Naive Bayes Multinomial'
+        val = 'Naive_Bayes_Multinomial'
     elif clf == 'SVM':
-        val = 'Support Vector Machine'
+        val = 'Support_Vector_Machine'
     elif clf == 'RF':
-        val = 'Random Forest'
+        val = 'Random_Forest'
     elif clf == 'ensemble':
         val = 'Ensemble'
-    elif clf == 'gb':
-        val = 'Gradient Boosting'
+    elif clf == 'GB':
+        val = 'Gradient_Boosting'
+    elif clf == 'tree':
+        val = 'Decision Tree'
     else:
-        val = 'logistic regression'
+        val = 'Logistic_Regression'
     print('Metrics from Bag of Words on '+ val +':')
     print('-'*30)
-    result_from_predicitions(result[0])
+    result_from_predicitions(result[0],title[0])
     print('-'*30)
     print('Metrics from TF-IDF on '+ val +':')
     print('-'*30)
-    result_from_predicitions(result[1])
-    print('-'*30)
-    print("plot graph")
-    print('-'*30)
+    result_from_predicitions(result[1],title[1])
+    print('-'*200)
+    plot_classification_report(result[0],result[1],title,val)
+    print('\nPrediction Confusion Matrix:')
+    print('-'*200)
+    cm1 = metrics.confusion_matrix(y_true=result[0][0], y_pred=result[0][1])
+    print(cm1)
+    print('-'*200)
+    cm2 = metrics.confusion_matrix(y_true=result[1][0], y_pred=result[1][1])
+    print(cm2)
+    plot_cm(cm1,cm2,val)
+    print('-'*200)
 def train_predict_model(classifier,X_train,X_test, y_train, y_test,multiclass):
     # build model
     assert X_train.shape[0] == y_train.shape[0]
     assert X_test.shape[0] == y_test.shape[0]
-    if classifier == 'NBGauss':
-        model = GaussianNB()
-    elif classifier == 'NBMulti':
+    if classifier == 'NBG':
+        model = BernoulliNB()
+        print(model)
+    elif classifier == 'NBM':
         model = MultinomialNB()
     elif classifier == 'SVM':
-        model = LinearSVC()
+        model = SVC(kernel='linear',probability=True)
+        print(model)
     elif classifier == 'RF':
         model = RandomForestClassifier(n_estimators=50, random_state=1)
+        print(model)
     elif classifier == 'ensemble':
-        model1 = LogisticRegression()
-        model2 = MultinomialNB()
+        model1 = BernoulliNB()
+        model2 = LogisticRegression()
         model3 = RandomForestClassifier(n_estimators=50, random_state=1)
-        model = VotingClassifier(estimators=[('lr', model1), ('nb', model2), ('rf', model3)], voting='hard')
-    elif classifier == 'gb':
-        model = XGBClassifier(n_estimators=100)
+        model = VotingClassifier(estimators=[('nb', model1), ('lr', model2)], voting='soft')
+        print(model)
+    elif classifier == 'GB':
+        model = GradientBoostingClassifier()
+        print(model)
+    elif classifier == 'tree':
+        model = tree.DecisionTreeClassifier(random_state=0)
+        print(model)
     else:
         if multiclass == 'yes':
             model = LogisticRegression(multi_class = 'multinomial', solver = 'lbfgs')
         else:
             model = LogisticRegression()
+            print(model)
     model.fit(X_train, y_train)
     # predict using model
     predicted = model.predict(X_test)
-    pred_prob = 0
-    #model.predict_proba(X_test)[:,1]
+    if (classifier != 'SVM' or classifier != 'ensemble'):
+        pred_prob = model.predict_proba(X_test)[:,1]
+
+    else:
+        pred_prob = None
+   
     acc = metrics.accuracy_score(y_test,predicted)
     acc = acc*100
-    loss = 0 
-    #log_loss(y_test,predicted)
-    #plot_roc(predicted, y_test)
-    result = [predicted,acc,loss,pred_prob]
+    if classifier == None:
+        loss = log_loss(y_test,predicted)
+        result = [predicted,acc,pred_prob,loss]
+    else:
+    
+        result = [predicted,acc,pred_prob]
     return result    
 def initiate_predictions(train_test_data,method,multiclass):
     X_train = train_test_data[0]
@@ -699,158 +728,177 @@ def initiate_predictions(train_test_data,method,multiclass):
     prediction = train_predict_model(method,X_train,X_test,y_train,y_test,multiclass)
     predicted = prediction[0]
     acc = prediction[1]
+    #true = y_train
     true = y_test
-    loss = prediction[2]
-    pred_prob = prediction[3]
-    result = [true,predicted,acc,loss,pred_prob]
+    
+    pred_prob = prediction[2]
+    
+    result = [true,predicted,acc,pred_prob]
     return result
-def result_from_predicitions(prediction_array):
-    '''
+def plot_cm(cm1,cm2,method):
+    plt.figure(figsize=(20, 10))
+    plt.subplot(121)
+    
+    plt.imshow(cm1, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
+    classNames = ['Negative','Positive']
+    plt.title('Result'+ method[0])
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    tick_marks = np.arange(len(classNames))
+    plt.xticks(tick_marks, classNames)
+    plt.yticks(tick_marks, classNames, rotation=90)
+    s = [['TN','FP'], ['FN', 'TP']]
+ 
+    for i in range(2):
+        for j in range(2):
+            plt.text(j,i, str(s[i][j])+" = "+str(cm1[i][j]))
+    
+    plt.subplot(122)
+    
+    plt.imshow(cm2, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
+    classNames = ['Negative','Positive']
+    plt.title('Result' + method[1])
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    tick_marks = np.arange(len(classNames))
+    plt.xticks(tick_marks, classNames)
+    plt.yticks(tick_marks, classNames, rotation=90)
+    s = [['TN','FP'], ['FN', 'TP']]
+ 
+    for i in range(2):
+        for j in range(2):
+            plt.text(j,i, str(s[i][j])+" = "+str(cm2[i][j]))
+    plt.plot()
+    plt.savefig('confusion_matrix_'+method+'.pdf')
+    plt.show()
+    plt.close()
+def plot_cm2(cm1,cm2,method):
+    plt.figure(figsize=(20, 10))
+    plt.subplot(121)
+    
+    plt.imshow(cm1, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
+    classNames = ['Negative','Positive']
+    plt.title('Result'+ method[0])
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    tick_marks = np.arange(len(classNames))
+    plt.xticks(tick_marks, classNames)
+    plt.yticks(tick_marks, classNames, rotation=90)
+    s = [['TN','FP'], ['FN', 'TP']]
+ 
+    for i in range(2):
+        for j in range(2):
+            plt.text(j,i, str(s[i][j])+" = "+str(cm1[i][j]))
+    
+    plt.subplot(122)
+    
+    plt.imshow(cm2, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
+    classNames = ['Negative','Positive']
+    plt.title('Result' + method[1])
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    tick_marks = np.arange(len(classNames))
+    plt.xticks(tick_marks, classNames)
+    plt.yticks(tick_marks, classNames, rotation=90)
+    s = [['TN','FP'], ['FN', 'TP']]
+ 
+    for i in range(2):
+        for j in range(2):
+            plt.text(j,i, str(s[i][j])+" = "+str(cm2[i][j]))
+    plt.plot()
+    plt.savefig('confusion_matrix2_'+method+'.pdf')
+    plt.show()
+    plt.close()
+def get_roc_curve(model, X, y):
+    pred_proba = model.predict_proba(X)[:, 1]
+    fpr, tpr, _ = roc_curve(y, pred_proba)
+    return fpr, tpr
+def result_from_predicitions(prediction_array,title):
+    
     print("Results from prediction:")
     print('-'*30)
-    df1=pd.DataFrame({'Actual':true, 'Predicted':predicted})
+    df1=pd.DataFrame({'Actual':prediction_array[0], 'Predicted':prediction_array[1]})
     print(df1)
-    '''
     print('Model Performance metrics:')
     print('-'*30)
-    print('Accuracy:', np.round(metrics.accuracy_score(prediction_array[0],prediction_array[1]),4))
-    print('Precision:', np.round(metrics.precision_score(prediction_array[0],prediction_array[1],average='weighted'),4))
-    print('Recall:', np.round(metrics.recall_score(prediction_array[0],prediction_array[1],average='weighted'),4))
-    print('F1 Score:', np.round(metrics.f1_score(prediction_array[0],prediction_array[1],average='weighted'),4))
+    
+    df2 = pd.DataFrame({'Accuracy:': np.round(metrics.accuracy_score(prediction_array[0],prediction_array[1]),4),\
+    'Precision:': np.round(metrics.precision_score(prediction_array[0],prediction_array[1]),4),\
+    'Recall:': np.round(metrics.recall_score(prediction_array[0],prediction_array[1]),4),\
+    'F1 Score:': np.round(metrics.f1_score(prediction_array[0],prediction_array[1]),4)},index=["result"+title])
+    print(df2)
+    df2.to_csv("result"+title+".csv")
     print('\nModel Classification report:')
     print('-'*30)
     print(metrics.classification_report(prediction_array[0],prediction_array[1]))
-    print('\nPrediction Confusion Matrix:')
-    print('-'*30)
-    cm = metrics.confusion_matrix(y_true=prediction_array[0], y_pred=prediction_array[1])
-    print(cm)
-def create_plot_data(prediction_array,method):
-    result_frame1 = pd.DataFrame(columns=["Method","Accuracy"])
-    result_frame2 = pd.DataFrame(columns=["Method","Loss"])
-    if method == 'NBGauss':
-        NBGresult_name = ["NBGres_BoW","NBGres_tfidf"]
-        NBGresult_acc = prediction_array[0]
-        NBGresult_loss = prediction_array[1]
-        for i in range(len(NBGresult_name)):
-            NBGresult1= pd.DataFrame([[NBGresult_name[i],NBGresult_acc[i]]], columns=["Method","Accuracy"])
-            result_frame1 = result_frame1.append(NBGresult1)
-            NBGresult2= pd.DataFrame([[NBGresult_name[i],NBGresult_loss[i]]], columns=["Method","Loss"])
-            result_frame2 = result_frame2.append(NBGresult2)
-            result_frame = [result_frame1,result_frame2]
-        return result_frame
-    elif method == 'NBMulti':
-        NBMresult_name = ["NBMres_BoW","NBMres_tfidf"]
-        NBMresult_acc = prediction_array[0]
-        NBMresult_loss = prediction_array[1]
-        for i in range(len(NBMresult_name)):
-            NBMresult1= pd.DataFrame([[NBMresult_name[i],NBMresult_acc[i]]], columns=["Method","Accuracy"])
-            result_frame1 = result_frame1.append(NBMresult1)
-            NBMresult2= pd.DataFrame([[NBMresult_name[i],NBMresult_loss[i]]], columns=["Method","Loss"])
-            result_frame2 = result_frame2.append(NBMresult2)
-            result_frame = [result_frame1,result_frame2]
-        return result_frame
-    elif method == 'SVM':
-        SVMresult_name = ["SVMres_BoW","SVMres_tfidf"]
-        SVMresult_acc = prediction_array[0]
-        SVMresult_loss = prediction_array[1]
-        for i in range(len(SVMresult_name)):
-            SVMresult1= pd.DataFrame([[SVMresult_name[i],SVMresult_acc[i]]], columns=["Method","Accuracy"])
-            result_frame1 = result_frame1.append(SVMresult1)
-            SVMresult2= pd.DataFrame([[SVMresult_name[i],SVMresult_loss[i]]], columns=["Method","Loss"])
-            result_frame2 = result_frame2.append(SVMresult2)
-            result_frame = [result_frame1,result_frame2]
-        return result_frame
-    elif method == 'gb':
-        GBresult_name = ["GBres_BoW","GBres_tfidf"]
-        GBresult_acc = prediction_array[0]
-        GBresult_loss = prediction_array[1]
-        for i in range(len(GBresult_name)):
-            GBresult1= pd.DataFrame([[GBresult_name[i],GBresult_acc[i]]], columns=["Method","Accuracy"])
-            result_frame1 = result_frame1.append(GBresult1)
-            GBresult2= pd.DataFrame([[GBresult_name[i],GBresult_loss[i]]], columns=["Method","Loss"])
-            result_frame2 = result_frame2.append(GBresult2)
-            result_frame = [result_frame1,result_frame2]
-        return result_frame
-    elif method == 'RF':
-        RFresult_name = ["RFres_BoW","RFres_tfidf"]
-        RFresult_acc = prediction_array[0]
-        RFresult_loss = prediction_array[1]
-        for i in range(len(RFresult_name)):
-            RFresult1= pd.DataFrame([[RFresult_name[i],RFresult_acc[i]]], columns=["Method","Accuracy"])
-            result_frame1 = result_frame1.append(RFresult1)
-            RFresult2= pd.DataFrame([[RFresult_name[i],RFresult_loss[i]]], columns=["Method","Loss"])
-            result_frame2 = result_frame2.append(RFresult2)
-            result_frame = [result_frame1,result_frame2]
-        return result_frame
-    elif method == 'ensemble':
-        ensemble_result_name = ["ensemble_res_BoW","ensemble_tfidf"]
-        ensemble_result_acc = prediction_array[0]
-        ensemble_result_loss = prediction_array[1]
-        for i in range(len(ensemble_result_name)):
-            ensemble_result1= pd.DataFrame([[ensemble_result_name[i],ensemble_result_acc[i]]], columns=["Method","Accuracy"])
-            result_frame1 = result_frame1.append(ensemble_result1)
-            ensemble_result2= pd.DataFrame([[ensemble_result_name[i],ensemble_result_loss[i]]], columns=["Method","Loss"])
-            result_frame2 = result_frame2.append(ensemble_result2)
-            result_frame = [result_frame1,result_frame2]
-        return result_frame
-    elif method == 'log':
-        logresult_name = ["logres_BoW","logres_tfidf"]
-        logresult_acc = prediction_array[0]
-        logresult_loss = prediction_array[1]
-        for i in range(len(logresult_name)):
-            logresult1= pd.DataFrame([[logresult_name[i],logresult_acc[i]]], columns=["Method","Accuracy"])
-            result_frame1 = result_frame1.append(logresult1)
-            logresult2= pd.DataFrame([[logresult_name[i],logresult_loss[i]]], columns=["Method","Loss"])
-            result_frame2 = result_frame2.append(logresult2)
-            result_frame = [result_frame1,result_frame2]
-        return result_frame
-    else:
-        result_name = ["lr_BoW","lr_tfidf","NBG_BoW","NBG_tfidf",\
-            "NBM_BoW","NBM_tfidf","SVM_BoW","SVM_tfidf",\
-            "RF_BoW","RF_tfidf","ensemble_BoW","ensemble_tfidf","GBres_BoW","GBres_tfidf"]
-        result_acc = prediction_array[0]
-        result_loss = prediction_array[1]
-        for i in range(len(result_name)):
-            result1= pd.DataFrame([[result_name[i],result_acc[i]]], columns=["Method","Accuracy"])
-            result_frame1 = result_frame1.append(result1)
-            result2= pd.DataFrame([[result_name[i],result_loss[i]]], columns=["Method","Loss"])
-            result_frame2 = result_frame2.append(result2)
-            result_frame = [result_frame1,result_frame2]
-        return result_frame
-#[6] plot data
-#plt.cm.RdYlBu
-def plot_metrics(result_frame):
-    figsize=(20, 10)
-    ticksize = 14
-    titlesize = ticksize + 8
-    labelsize = ticksize + 5
+def result_from_predicitions2(prediction_array):
     
-    params = {'figure.figsize' : figsize,
-            'axes.labelsize' : labelsize,
-            'axes.titlesize' : titlesize,
-            'xtick.labelsize': ticksize,
-            'ytick.labelsize': ticksize}
+    print("Results from prediction:")
+    print('-'*30)
+    df1=pd.DataFrame({'Actual':prediction_array[0], 'Predicted':prediction_array[4]})
+    print(df1)
+    print('Model Performance metrics:')
+    print('-'*30)
+    print('Accuracy:', np.round(metrics.accuracy_score(prediction_array[0],prediction_array[4]),4))
+    print('Precision:', np.round(metrics.precision_score(prediction_array[0],prediction_array[4]),4))
+    print('Recall:', np.round(metrics.recall_score(prediction_array[0],prediction_array[4]),4))
+    print('F1 Score:', np.round(metrics.f1_score(prediction_array[0],prediction_array[4]),4))
+    print('\nModel Classification report:')
+    print('-'*30)
+    print(metrics.classification_report(prediction_array[0],prediction_array[4]))
+def plot_learning_curve(estimator, title, X, y, ylim, cv, n_jobs, train_sizes):
+    
+    plt.figure()
+    plt.title(title)
+    if ylim is not None:
+        plt.ylim(*ylim)
+    plt.xlabel("Training examples")
+    plt.ylabel("Score")
+    train_sizes, train_scores, test_scores = learning_curve(estimator, X, y, cv=cv, n_jobs=n_jobs, train_sizes=train_sizes)
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+    plt.grid()
 
-    plt.rcParams.update(params)
-    plt.subplot(211)
-    sns.set_color_codes("muted")
-    sns.barplot(x='Method', y='Accuracy', data=result_frame[0], color="r")
-    plt.xlabel('Accuracy Method')
-    plt.title('Classifier Accuracy Percent')
+    plt.fill_between(train_sizes, train_scores_mean - train_scores_std,
+                     train_scores_mean + train_scores_std, alpha=0.1,
+                     color="r")
+    plt.fill_between(train_sizes, test_scores_mean - test_scores_std,
+                     test_scores_mean + test_scores_std, alpha=0.1, color="g")
+    plt.plot(train_sizes, train_scores_mean, 'o-', color="r",
+             label="Training score")
+    plt.plot(train_sizes, test_scores_mean, 'o-', color="g",
+             label="Cross-validation score")
 
-    plt.subplot(212)
-    sns.set_color_codes("muted")
-    sns.barplot(x='Method', y='loss', data=result_frame[1], color="b")
-    plt.xlabel('Loss Method')
-    plt.title('Classifier Loss Percent')
-    plt.show()
-
-#AUCROC not complete
-def plot_roc(pred_data, test_data):
+    plt.legend(loc="best")
+    return plt
+def run_kfold(clf):
+    kf = KFold(n_splits=10,shuffle=True)
+    outcomes = []
+    with open('output_data.pickle', 'rb') as handle:
+        output_data = pickle.load(handle)
+    with open('preproc1.pickle', 'rb') as handle:
+        input_data = pickle.load(handle)
+    fold = 0
+    for train_index, test_index in kf.split(input_data):
+        fold += 1
+        X_train, X_test = input_data.values[train_index], input_data.values[test_index]
+        y_train, y_test = output_data.values[train_index], output_data.values[test_index]
+        clf.fit(X_train, y_train)
+        predictions = clf.predict(X_test)
+        accuracy = accuracy_score(y_test, predictions)
+        outcomes.append(accuracy)
+        print("Fold {0} accuracy: {1}".format(fold, accuracy))     
+    mean_outcome = np.mean(outcomes)
+    print("Mean Accuracy: {0}".format(mean_outcome)) 
+#AUCROC for binary class only
+def plot_roc(result1,result2,title,method):
     #courtesy of DATAI https://www.kaggle.com/kanncaa1/roc-curve-with-k-fold-cv
     # plot arrows, why? to present accuracy
-    fig1 = plt.figure(figsize=[12,12])
-    ax1 = fig1.add_subplot(111,aspect = 'equal')
+    '''
+    fig1 = plt.figure(figsize=[20,10])
+    ax1 = fig1.add_subplot(121,aspect = 'equal')
     ax1.add_patch(
         patches.Arrow(0.45,0.5,-0.25,0.25,width=0.3,color='green',alpha = 0.5)
         )
@@ -860,26 +908,203 @@ def plot_roc(pred_data, test_data):
     tprs = []
     aucs = []
     mean_fpr = np.linspace(0,1,100)
-    for i in range(len(pred_data)):
-        fpr, tpr, _ = roc_curve(test_data[i], pred_data[i])
-        tprs.append(interp(mean_fpr, fpr, tpr))
-        roc_auc = auc(fpr, tpr)
-        aucs.append(roc_auc)
-        plt.plot(fpr, tpr, lw=2, alpha=0.3, label='ROC fold %d (AUC = %0.2f)' % (i, roc_auc))
+    print(result1)
+    #for i in range(len(result1[3])):
+    fpr, tpr, _ = roc_curve(result1[0], result1[5])
+    with open('fpr'+title[0]+method+'.pickle', 'wb') as handle:
+        pickle.dump(fpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        with open('tpr'+title[0]+method+'.pickle', 'wb') as handle:
+            pickle.dump(tpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    tprs.append(interp(mean_fpr, fpr, tpr))
+    roc_auc = auc(fpr, tpr)
+    aucs.append(roc_auc)
+    #plt.plot(fpr, tpr, lw=2, alpha=0.3, label=' (AUC = %0.2f)' % (roc_auc))
     
     plt.plot([0,1],[0,1],linestyle = '--',lw = 2,color = 'black')
     mean_tpr = np.mean(tprs, axis=0)
     mean_auc = auc(mean_fpr, mean_tpr)
-    plt.plot(mean_fpr, mean_tpr, color='blue',
-            label=r'Mean ROC (AUC = %0.2f )' % (mean_auc),lw=2, alpha=1)
+    plt.plot(mean_fpr, mean_tpr, color='red',
+            label=r'ROC (AUC = %0.2f )' % (mean_auc),lw=2, alpha=1)
     
     plt.xlabel('FPR')
     plt.ylabel('TPR')
-    plt.title('ROC')
+    plt.title('ROC '+title[0])
     plt.legend(loc="lower right")
     plt.text(0.32,0.7,'More accurate area',fontsize = 12)
     plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
+    ax2 = fig1.add_subplot(122,aspect = 'equal')
+    ax2.add_patch(
+        patches.Arrow(0.45,0.5,-0.25,0.25,width=0.3,color='green',alpha = 0.5)
+        )
+    ax2.add_patch(
+        patches.Arrow(0.5,0.45,0.25,-0.25,width=0.3,color='red',alpha = 0.5)
+        )
+    tprs = []
+    aucs = []
+    mean_fpr = np.linspace(0,1,100)
+    #for i in range(len(result2[3])):
+    fpr, tpr, _ = roc_curve(result2[0], result2[5])
+    with open('fpr'+title[1]+method+'.pickle', 'wb') as handle:
+        pickle.dump(fpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        with open('tpr'+title[1]+method+'.pickle', 'wb') as handle:
+            pickle.dump(tpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    tprs.append(interp(mean_fpr, fpr, tpr))
+    roc_auc = auc(fpr, tpr)
+    aucs.append(roc_auc)
+    #plt.plot(fpr, tpr, lw=2, alpha=0.3, label='(AUC = %0.2f)' % (roc_auc))
+    
+    plt.plot([0,1],[0,1],linestyle = '--',lw = 2,color = 'black')
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_auc = auc(mean_fpr, mean_tpr)
+    
+    plt.plot(mean_fpr, mean_tpr, color='blue',
+            label=r'ROC (AUC = %0.2f )' % (mean_auc),lw=2, alpha=1)
+    
+    plt.xlabel('FPR')
+    plt.ylabel('TPR')
+    plt.title('ROC ' + title[1])
+    plt.legend(loc="lower right")
+    plt.text(0.32,0.7,'More accurate area',fontsize = 12)
+    plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
+    '''
+    figsize=(20, 10)
+    
+    ticksize = 14
+    titlesize = ticksize + 8
+    labelsize = ticksize + 5
+
+    params = {'figure.figsize' : figsize,
+            'axes.labelsize' : labelsize,
+            'axes.titlesize' : titlesize,
+            'xtick.labelsize': ticksize,
+            'ytick.labelsize': ticksize}
+
+    plt.rcParams.update(params)
+    fpr_keras1, tpr_keras1, _ = roc_curve(result1[0], result1[3])
+    fpr_keras2, tpr_keras2, _ = roc_curve(result2[0], result2[3])
+    auc_keras1 = auc(fpr_keras1, tpr_keras1)
+    auc_keras2 = auc(fpr_keras2, tpr_keras2)
+    plt.figure(1)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.plot(fpr_keras1, tpr_keras1, label= title[0] +'(area = {:.3f})'.format(auc_keras1))
+    plt.plot(fpr_keras2, tpr_keras2, label= title[1] +'(area = {:.3f})'.format(auc_keras2))
+    plt.xlabel('False positive rate')
+    plt.ylabel('True positive rate')
+    plt.title('ROC curve')
+    plt.legend(loc='best')
     plt.show()
+
+    plt.savefig('roc1_'+method+'.pdf')
+    plt.show()
+    plt.close()
+def plot_roc2(result1,result2,title,method):
+    #courtesy of DATAI https://www.kaggle.com/kanncaa1/roc-curve-with-k-fold-cv
+    # plot arrows, why? to present accuracy
+    '''
+    fig1 = plt.figure(figsize=[20,10])
+    ax1 = fig1.add_subplot(121,aspect = 'equal')
+    ax1.add_patch(
+        patches.Arrow(0.45,0.5,-0.25,0.25,width=0.3,color='green',alpha = 0.5)
+        )
+    ax1.add_patch(
+        patches.Arrow(0.5,0.45,0.25,-0.25,width=0.3,color='red',alpha = 0.5)
+        )
+    tprs = []
+    aucs = []
+    mean_fpr = np.linspace(0,1,100)
+    print(result1)
+    #for i in range(len(result1[3])):
+    fpr, tpr, _ = roc_curve(result1[0], result1[5])
+    with open('fpr'+title[0]+method+'.pickle', 'wb') as handle:
+        pickle.dump(fpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        with open('tpr'+title[0]+method+'.pickle', 'wb') as handle:
+            pickle.dump(tpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    tprs.append(interp(mean_fpr, fpr, tpr))
+    roc_auc = auc(fpr, tpr)
+    aucs.append(roc_auc)
+    #plt.plot(fpr, tpr, lw=2, alpha=0.3, label=' (AUC = %0.2f)' % (roc_auc))
+    
+    plt.plot([0,1],[0,1],linestyle = '--',lw = 2,color = 'black')
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_auc = auc(mean_fpr, mean_tpr)
+    plt.plot(mean_fpr, mean_tpr, color='red',
+            label=r'ROC (AUC = %0.2f )' % (mean_auc),lw=2, alpha=1)
+    
+    plt.xlabel('FPR')
+    plt.ylabel('TPR')
+    plt.title('ROC '+title[0])
+    plt.legend(loc="lower right")
+    plt.text(0.32,0.7,'More accurate area',fontsize = 12)
+    plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
+    ax2 = fig1.add_subplot(122,aspect = 'equal')
+    ax2.add_patch(
+        patches.Arrow(0.45,0.5,-0.25,0.25,width=0.3,color='green',alpha = 0.5)
+        )
+    ax2.add_patch(
+        patches.Arrow(0.5,0.45,0.25,-0.25,width=0.3,color='red',alpha = 0.5)
+        )
+    tprs = []
+    aucs = []
+    mean_fpr = np.linspace(0,1,100)
+    #for i in range(len(result2[3])):
+    fpr, tpr, _ = roc_curve(result2[0], result2[5])
+    with open('fpr'+title[1]+method+'.pickle', 'wb') as handle:
+        pickle.dump(fpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        with open('tpr'+title[1]+method+'.pickle', 'wb') as handle:
+            pickle.dump(tpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    tprs.append(interp(mean_fpr, fpr, tpr))
+    roc_auc = auc(fpr, tpr)
+    aucs.append(roc_auc)
+    #plt.plot(fpr, tpr, lw=2, alpha=0.3, label='(AUC = %0.2f)' % (roc_auc))
+    
+    plt.plot([0,1],[0,1],linestyle = '--',lw = 2,color = 'black')
+    mean_tpr = np.mean(tprs, axis=0)
+    mean_auc = auc(mean_fpr, mean_tpr)
+    
+    plt.plot(mean_fpr, mean_tpr, color='blue',
+            label=r'ROC (AUC = %0.2f )' % (mean_auc),lw=2, alpha=1)
+    
+    plt.xlabel('FPR')
+    plt.ylabel('TPR')
+    plt.title('ROC ' + title[1])
+    plt.legend(loc="lower right")
+    plt.text(0.32,0.7,'More accurate area',fontsize = 12)
+    plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
+    '''
+    figsize=(20, 10)
+    
+    ticksize = 14
+    titlesize = ticksize + 8
+    labelsize = ticksize + 5
+
+    params = {'figure.figsize' : figsize,
+            'axes.labelsize' : labelsize,
+            'axes.titlesize' : titlesize,
+            'xtick.labelsize': ticksize,
+            'ytick.labelsize': ticksize}
+
+    plt.rcParams.update(params)
+    fpr_keras1, tpr_keras1, _ = roc_curve(result1[0], result1[5])
+    fpr_keras2, tpr_keras2, _ = roc_curve(result2[0], result2[5])
+    auc_keras1 = auc(fpr_keras1, tpr_keras1)
+    auc_keras2 = auc(fpr_keras2, tpr_keras2)
+    plt.figure(1)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.plot(fpr_keras1, tpr_keras1, label= title[0] +'(area = {:.3f})'.format(auc_keras1))
+    plt.plot(fpr_keras2, tpr_keras2, label= title[1] +'(area = {:.3f})'.format(auc_keras2))
+    plt.xlabel('False positive rate')
+    plt.ylabel('True positive rate')
+    plt.title('ROC curve')
+    plt.legend(loc='best')
+    plt.show()
+
+    plt.savefig('roc2_'+method+'.pdf')
+    plt.show()
+    plt.close()
 #perform predictions on classification methods
 def clf_predictor(input_data,multiclass):
     result_logregr = predictor(input_data,None,multiclass)
@@ -963,104 +1188,263 @@ def clf_predictor(input_data,multiclass):
     result=[result1,result2]
     return result
 #perform word embeddings inputs: dataframe input data and output data; output: embedded data such as X train and test and y train and test
-def word_embeddings(input_data, output_data,ANN,dense,el):
+def remove_stopwords(input_text):
+    stopwords_list = stopwords.words('swedish')
+        # Some words which might indicate a certain sentiment are kept via a whitelist
+        
+    words = input_text.split() 
+    clean_words = [word for word in words if (word not in stopwords_list) and len(word) > 1] 
+    return " ".join(clean_words) 
+#category is binary by default
+def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     
+    #Don't use stop words removal for deep learning
+    #input_data = input_data.apply(remove_stopwords)
+    
+    data = feature_engineering(input_data, output_data)
     '''
-    #create validation data
-    val_data = input_data.sample(frac=0.2,random_state=1)
-    train_data = input_data.drop(val_data.index)
+    global model2
+    resmod2 = [None] * input_data.shape[0]
+    #print(np.array(input_data)[0])
+    for i in range(input_data.shape[0]):
+        resmod = model2.predict(np.array(input_data)[i])
+        print(resmod[0])
+        lst = list(resmod)
+        if lst[0] == "('label_1',)":
+            lst[0] = 1
+        else:
+            lst[0] = 0
+        
+        resmod2.append(tuple(lst))
+    print(resmod2)
+    resmod = [value for x in resmod2 for value in x and value is not None]
+    resmod = np.array(resmod2)
     '''
-    data_out = we_output_data_transform(output_data,'int')
+
+
+    print("Train set has total {0} entries with {1:.2f}% 0, {2:.2f}% 1".format(len(data[0]),
+                                                                             (len(data[0][data[2] == 0]) / (len(data[0])*1.))*100,
+                                                                        (len(data[0][data[2] == 1]) / (len(data[0])*1.))*100))
+    print("Test set has total {0} entries with {1:.2f}% 0, {2:.2f}% 1".format(len(data[1]),
+                                                                             (len(data[1][data[3] == 0]) / (len(data[1])*1.))*100,
+                                                                            (len(data[1][data[3] == 1]) / (len(data[1])*1.))*100))
+    
+    data_out = we_output_data_transform(data[2],data[3])
     '''
-    #checks the output data before and after transformation
-    print(output_data)
-    print('-'*50)
-    print(data_out)
+    if category == None:
+        data = feature_engineering(input_data, output_data)
+        data_out = we_output_data_transform(data[2],data[3])
+    else:
+        with open('df.pickle', 'rb') as handle:
+            df = pickle.load(handle)
+        count = len(df.index)
+        data = feature_engineering(input_data, output_data)
+        dataset,data_out = we_output_data_transform(data[2],data[3],'multi')
+        data_in1 = multivectorizer(dataset)
+        data_in2 = feature_engineering(data_in1[0], data_out[:count])
+        #validation data
+        data2 = feature_engineering(data_in2[0], data_out[0])
     '''
     
-    data = feature_engineering(input_data, data_out)
     #index 0 = X_train
     #index 1 = X_test
     #index 2 = y_train
     #index 3 = y_test
     assert data[0].shape[0] == data[2].shape[0]
     assert data[1].shape[0] == data[3].shape[0]
-    data_in1 = tokenizer(data[0], data[1])
-    data_in2 = padding(data_in1[0], data_in1[1])
-    #create validation data
-    global MAX_LEN
-    MAX_LEN = input_data.shape[0]
-    data2 = feature_engineering(data_in2[0], data[2])
+    data_in1 = tokenizer(input_data,data[0], data[1])
+    
+    #print(data_in1[2])
+    data_in2 = padding(data_in1[0], data_in1[1],input_data)
+    global MAX_SEQUENCE_LENGTH
+    MAX_SEQUENCE_LENGTH = data_in2[0].shape[1]
+    '''
+    data_in21 = vectorize_sequences(input_data)
+    '''
+    
+    #create validation data 
+    data2 = feature_engineering(data_in2[0], data_out[0])
     #data2[0] = X_val
     #data2[2] = y_val
     assert data2[1].shape[0] == data2[3].shape[0]
     assert data2[0].shape[0] == data2[2].shape[0]
-    with open('data_in2.pickle', 'wb') as handle:
-        pickle.dump(data_in2, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    with open('data2.pickle', 'wb') as handle:
-        pickle.dump(data2, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    with open('data_out.pickle', 'wb') as handle:
-        pickle.dump(data_out, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    '''
     #fasttext (word_to_vec_map, word_to_index, index_to_words, vocab_size, dim)
     #tip: try to swap the sv.vec file with cc.sv.300.vec
     #load fasttext data into cnn1
+    #save
+    with open('data_in2.pickle', 'wb') as handle:
+        pickle.dump(data_in2, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open('data_out.pickle', 'wb') as handle:
+        pickle.dump(data_out, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    '''
+    with open('data_in.pickle', 'rb') as handle:
+        data_in = pickle.load(handle)
+    with open('data_out.pickle', 'rb') as handle:
+        data_out = pickle.load(handle)
+    '''
+   
     corpus = load_vectors2('./data/fasttext/sv.vec')
-    embedding_layer1 = pretrained_embedding_layer(corpus[0], corpus[1])
-    corpus1 = load_vectors2('./cc.sv.300.vec')
-    embedding_layer2 = pretrained_embedding_layer(corpus1[0],corpus1[1])
+    #data_train = sentences_to_indices(data[0],corpus[1],len(data_in1[2]))
+    #data_test = sentences_to_indices(data[1],corpus[1],len(data_in1[2]))
+    '''
+    wiki_news = './cc.sv.300.vec'
+    embed_fasttext = load_embed(wiki_news)
+    #step1 build vocab
+    vocab = build_vocab(input_data)
+    #vocab is your embedding matrix
+    #step2 check coverage
+    print("FastText : ")
+    oov_fasttext = check_coverage(vocab, embed_fasttext)
+    print(oov_fasttext[:18])
+    '''
+    vocab = None
+    #change corpus[1] to data_in[2]
+    embedding_layer1 = pretrained_embedding_layer(corpus[0], corpus[1],vocab)
+    print(corpus[4])
+    
     embedding_layer0=load_vectors_word2vec('./data/word2vec/sv.bin',data_in1[2])
-    embedding_layer = [embedding_layer0,embedding_layer1,embedding_layer2]
+    
+    embedding_layer = [embedding_layer0,embedding_layer1]
+    #second preprocessing method
     #change data_in2[0].shape[1] with (MAX_LEN,)
+    
     start_time = time.time()
     print(date_time(1))
-    model = predict_model(MAX_LEN,embedding_layer[el],ANN,data_in2[0],data[2],data2[0],data2[2],dense)
+    model = predict_model(MAX_LEN,embedding_layer[el],ANN,data_in2[0],data_out[0],data_in2[1],data_out[1],1)
+    #or
+    #model = predict_model(MAX_LEN,embedding_layer[el],ANN,data_train,data_out[0],None,None,dense)
     elapsed_time = time.time() - start_time
     elapsed_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
     print("\nElapsed Time: " + elapsed_time)
     print("Completed Model Trainning", date_time(1))
+    '''
+    with open('model'+ANN+'.pickle', 'rb') as handle:
+        model = pickle.load(handle)
+    '''
     #data_in2[0] = X_train
     #data[2] = y_train
-    return [model, data_in2, data]
-def we_evaluation(model,model1,data1,data2):
-    plot_performance(model)
-    plot_performance(model1)
-    preds = model.predict(data1[1])
-    preds1 = model1.predict(data1[1])
-    #or
-    #preds2 = model.predict_classes(data_in2[1])
-    '''
-   # Call the metrics function
-    '''
-    prediction_array1 = [data2[3],preds]
-    prediction_array2 = [data2[3],preds1]
-    result_from_predicitions(prediction_array1)
-    print('-'*60)
-    result_from_predicitions(prediction_array2)
-    test1 = 'CNN1'
-    test2 = 'CNN2'
-
-    accuracy1 = model.evaluate(data1[1], data2[3], verbose=1)
-    print("Model Performance of model 1: "+ test1 +" (Test Accuracy):")
-    print('Accuracy: {:0.2f}%\nLoss: {:0.3f}\n'.format(accuracy1[1]*100, accuracy1[0]))
-    accuracy2 = model1.evaluate(data1[1], data2[3], verbose=1)
-    print("Model Performance of model 2: "+ test2 +" (Test Accuracy):")
-    print('Accuracy: {:0.2f}%\nLoss: {:0.3f}\n'.format(accuracy2[1]*100, accuracy2[0]))
-    
-    
-
-    result1 = pd.DataFrame({'model': test1, 'score': accuracy1[1]*100}, index=[-1])
-    result2 = pd.DataFrame({'model': test2, 'score': accuracy2[1]*100}, index=[-1])
-    result = pd.concat([result2, result1.ix[:]]).reset_index(drop=True)
-    plot_model_performace(result)
-
-    preds = np.round(np.argmax(preds, axis=1)).astype(int)
-    preds1 = np.round(np.argmax(preds1, axis=1)).astype(int)
-    result = [preds,preds1]
-    '''
-    result = None
+    return [data_in2, data2, data,model]
+def vectorize_sequences(sequences, dimension=4900):
+    results = np.zeros((len(sequences), dimension))
+    for i, sequence in enumerate(sequences):
+        results[i, sequence] = 1.
+    return results
+def multivectorization(concated):
+    tokenizer = Tokenizer(filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~', lower=True)
+    tokenizer.fit_on_texts(concated['freetext'].values)
+    sequences = tokenizer.texts_to_sequences(concated['freetext'].values)
+    word_index = tokenizer.word_index
+    X = pad_sequences(sequences, maxlen=MAX_LEN)
+    result = [X,word_index]
     return result
+def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
+    
+    preds1 = model.predict(data1[1],batch_size=13)
+    preds2 = model1.predict(data3[1],batch_size=13)
+    preds1 = np.argmax(preds1, axis=-1)
+    preds2 = np.argmax(preds2, axis=-1)
+    with open('preds1.pickle', 'wb') as handle:
+        pickle.dump(preds1, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open('preds2.pickle', 'wb') as handle:
+        pickle.dump(preds2, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open('test_data1.pickle', 'wb') as handle:
+        pickle.dump(datax[3], handle, protocol=pickle.HIGHEST_PROTOCOL)
+    with open('test_data2.pickle', 'wb') as handle:
+        pickle.dump(datay[3], handle, protocol=pickle.HIGHEST_PROTOCOL)
 
+    test1 = ANN1
+    test2 = ANN2
+    title = [test1,test2]
+    #keras evaluation
+    score = model.evaluate(data2[1], data2[3], verbose=0)
+    print("Model Performance of model 1: "+ test1 +" (Test):")
+    df_score1=pd.DataFrame.from_records([{'Accuracy':score[1],'Precision':score[2],'Recall':score[3],'F1_score':score[4]}])
+    print(df_score1)
+    score = model1.evaluate(data4[1], data4[3], verbose=0)
+    print("Model Performance of model 2: "+ test2 +" (Test):")
+    df_score2=pd.DataFrame.from_records([{'Accuracy':score[1],'Precision':score[2],'Recall':score[3],'F1_score':score[4]}])
+    print(df_score2)
+    with open('preds1.pickle', 'rb') as handle:
+        preds1 = pickle.load(handle)
+    with open('preds2.pickle', 'rb') as handle:
+        preds2 = pickle.load(handle)
+    with open('test_data1.pickle', 'rb') as handle:
+        test_data1 = pickle.load(handle)
+    with open('test_data2.pickle', 'rb') as handle:
+        test_data2 = pickle.load(handle)
+    #SKLearn Evaluation
+    target_class = ['class_0','class_1']
+    labels = [0,1]
+    print("Results from prediction:")
+    print('-'*200)
+    df1=pd.DataFrame({'Actual':test_data1, 'Predicted':preds1})
+    print(df1)
+    print('-'*200)
+    df2=pd.DataFrame({'Actual':test_data2, 'Predicted':preds2})
+    print(df2)
+    df2 = pd.DataFrame({'Accuracy:': np.round(metrics.accuracy_score(test_data2,preds1),4),\
+    'Precision:': np.round(metrics.precision_score(test_data2,preds1),4),\
+    'Recall:': np.round(metrics.recall_score(test_data2,preds1),4),\
+    'F1 Score:': np.round(metrics.f1_score(test_data2,preds1),4)},index=["result"+title[0]])
+    print(df2)
+    df2.to_csv("result"+title[0]+".csv")
+    df2 = pd.DataFrame({'Accuracy:': np.round(metrics.accuracy_score(test_data2,preds2),4),\
+    'Precision:': np.round(metrics.precision_score(test_data2,preds2),4),\
+    'Recall:': np.round(metrics.recall_score(test_data2,preds2),4),\
+    'F1 Score:': np.round(metrics.f1_score(test_data2,preds2),4)},index=["result"+title[1]])
+    print(df2)
+    df2.to_csv("result"+title[1]+".csv")
+    print('-'*200)
+    print(metrics.classification_report(test_data1,preds1,labels,target_class))
+    print('-'*200)
+    print(metrics.classification_report(test_data2,preds2,labels,target_class))
+    array1 = [test_data1,preds1]
+    array2 = [test_data2,preds2]
+    method = test1+'_'+test2
+    plot_classification_report(array1,array2,title,method)
+    print('-'*200)
+    print('\nPrediction Confusion Matrix:')
+    print('-'*200)
+    cm1 = metrics.confusion_matrix(y_true=test_data1, y_pred=preds1)
+    print(cm1)
+    cm2 = metrics.confusion_matrix(y_true=test_data2, y_pred=preds2)
+    print(cm2)
+    plot_cm(cm1,cm2,method)
+
+    preds3 = model.predict(data1[1],batch_size=13).ravel()
+    preds4 = model1.predict(data3[1],batch_size=13).ravel()
+    fpr_keras1, tpr_keras1, _ = roc_curve(test_data1, preds3)
+    fpr_keras2, tpr_keras2, _ = roc_curve(test_data2, preds4)
+    auc_keras1 = auc(fpr_keras1, tpr_keras1)
+    auc_keras2 = auc(fpr_keras2, tpr_keras2)
+    plt.figure(1)
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.plot(fpr_keras1, tpr_keras1, label= test1 +'(area = {:.3f})'.format(auc_keras1))
+    plt.plot(fpr_keras2, tpr_keras2, label= test2 +'(area = {:.3f})'.format(auc_keras2))
+    plt.xlabel('False positive rate')
+    plt.ylabel('True positive rate')
+    plt.title('ROC curve')
+    plt.legend(loc='best')
+    plt.show()
+
+    df1.to_csv('prediction1.csv', encoding='utf-8', index=True)
+    df2.to_csv('prediction2.csv', encoding='utf-8', index=True)
+def sentences_to_indices(X, word_to_index, maxLen):
+    m = X.shape[0] 
+    X = np.array(X)
+    X_indices = np.zeros((m, maxLen))
+    
+    
+    for i in range(m):
+        sentence_words = X[i].lower().strip().split()
+        j = 0
+        for w in sentence_words:
+            if w not in word_to_index:
+                w = "person"  
+            X_indices[i, j] = word_to_index[w]
+            j = j + 1
+    
+    return X_indices
 def plot_function(track):
     plt.subplot(221)
     plt.plot(track.history['acc'])
@@ -1076,16 +1460,116 @@ def plot_function(track):
     plt.xlabel('epoch')
     plt.legend(['train'], loc='upper left')
     plt.show()
+def plot_classification_report(array1, array2,title,method, ax=None):
+    plt.figure(figsize=(20, 10))
+    plt.subplot(211)
+    
+    plt.title('Classification Report '+title[0])
+    xticks = ['precision', 'recall', 'f1-score', 'support']
+    yticks = list(np.unique(array1[0]))
+    yticks += ['avg']
+
+    rep = np.array(precision_recall_fscore_support(array1[0], array1[1])).T
+    avg = np.mean(rep, axis=0)
+    avg[-1] = np.sum(rep[:, -1])
+    rep = np.insert(rep, rep.shape[0], avg, axis=0)
+
+    sns.heatmap(rep,
+                annot=True, 
+                cbar=False, 
+                xticklabels=xticks, 
+                yticklabels=yticks,
+                ax=ax)
+
+    plt.subplot(212)
+    
+    plt.title('Classification Report '+title[1])
+    xticks = ['precision', 'recall', 'f1-score', 'support']
+    yticks = list(np.unique(array2[0]))
+    yticks += ['avg']
+
+    rep = np.array(precision_recall_fscore_support(array2[0], array2[1])).T
+    avg = np.mean(rep, axis=0)
+    avg[-1] = np.sum(rep[:, -1])
+    rep = np.insert(rep, rep.shape[0], avg, axis=0)
+
+    sns.heatmap(rep,
+                annot=True, 
+                cbar=False, 
+                xticklabels=xticks, 
+                yticklabels=yticks,
+                ax=ax)
+    
+    
+    plt.savefig('classification_report_'+ method +'.pdf')
+    plt.show()
+    plt.close()
+def plot_classification_report2(array1, array2,title,method, ax=None):
+    plt.figure(figsize=(20, 10))
+    plt.subplot(211)
+    
+    plt.title('Classification Report '+title[0])
+    xticks = ['precision', 'recall', 'f1-score', 'support']
+    yticks = list(np.unique(array1[0]))
+    yticks += ['avg']
+
+    rep = np.array(precision_recall_fscore_support(array1[0], array1[4])).T
+    avg = np.mean(rep, axis=0)
+    avg[-1] = np.sum(rep[:, -1])
+    rep = np.insert(rep, rep.shape[0], avg, axis=0)
+
+    sns.heatmap(rep,
+                annot=True, 
+                cbar=False, 
+                xticklabels=xticks, 
+                yticklabels=yticks,
+                ax=ax)
+
+    plt.subplot(212)
+    
+    plt.title('Classification Report '+title[1])
+    xticks = ['precision', 'recall', 'f1-score', 'support']
+    yticks = list(np.unique(array2[0]))
+    yticks += ['avg']
+
+    rep = np.array(precision_recall_fscore_support(array2[0], array2[4])).T
+    avg = np.mean(rep, axis=0)
+    avg[-1] = np.sum(rep[:, -1])
+    rep = np.insert(rep, rep.shape[0], avg, axis=0)
+
+    sns.heatmap(rep,
+                annot=True, 
+                cbar=False, 
+                xticklabels=xticks, 
+                yticklabels=yticks,
+                ax=ax)
+    
+    
+    plt.savefig('classification_report2_'+ method +'.pdf')
+    plt.show()
+    plt.close()
 #tokenizes the words
-def tokenizer(train_data, test_data):
+def tokenizer(input_data,train_data, test_data):
     #from [7]
-    tk = Tokenizer(num_words=NB_WORDS, filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n', lower=True, split=" ")
-    tk.fit_on_texts(train_data)
+    seq_lengths = input_data.apply(lambda x: len(x.split(' ')))
+    print(seq_lengths.describe())
+    
+    
+    max_sequence_len = max([len(x) for x in input_data])
+    print(max_sequence_len)
+    
+    tk = Tokenizer(num_words=NB_WORDS,filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n', lower=True, split=" ")
+    tk.fit_on_texts(input_data)
     trained_seq = tk.texts_to_sequences(train_data)
     test_seq = tk.texts_to_sequences(test_data)
     word_index = tk.word_index
-    result = [trained_seq, test_seq, word_index]
+    result = [trained_seq, np.array(test_seq), word_index]
     return result
+def one_hot_seq(seqs, nb_features = NB_WORDS):
+    ohs = np.zeros((len(seqs), nb_features))
+    for i, s in enumerate(seqs):
+        ohs[i, s] = 1.
+    return ohs
 #test function from [7] to make sure that the sequences generated from the tokenizer function are of equal length
 def test_sequence(train_data):
     seq_lengths = train_data.apply(lambda x: len(x.split(' ')))
@@ -1105,22 +1589,21 @@ def plot_performance(history=None, figure_directory=None, ylim_pad=[0, 0]):
     xlabel = 'Epoch'
     legends = ['Training', 'Validation']
 
-    plt.figure(figsize=(20, 5))
-
-    y1 = history.history['acc']
-    y2 = history.history['val_acc']
+    plt.figure(figsize=(20, 10))
+    y1 = history.history['f1_score1']
+    y2 = history.history['val_f1_score1']
 
     min_y = min(min(y1), min(y2))-ylim_pad[0]
     max_y = max(max(y1), max(y2))+ylim_pad[0]
 
-    plt.subplot(121)
+    plt.subplot(221)
 
     plt.plot(y1)
     plt.plot(y2)
 
-    plt.title('Model Accuracy\n'+date_time(1), fontsize=17)
+    plt.title('Model F1_score\n'+date_time(1), fontsize=17)
     plt.xlabel(xlabel, fontsize=15)
-    plt.ylabel('Accuracy', fontsize=15)
+    plt.ylabel('F1_score', fontsize=15)
     plt.ylim(min_y, max_y)
     plt.legend(legends, loc='upper left')
     plt.grid()
@@ -1132,7 +1615,7 @@ def plot_performance(history=None, figure_directory=None, ylim_pad=[0, 0]):
     max_y = max(max(y1), max(y2))+ylim_pad[1]
 
 
-    plt.subplot(122)
+    plt.subplot(222)
 
     plt.plot(y1)
     plt.plot(y2)
@@ -1143,30 +1626,111 @@ def plot_performance(history=None, figure_directory=None, ylim_pad=[0, 0]):
     plt.ylim(min_y, max_y)
     plt.legend(legends, loc='upper left')
     plt.grid()
+
+    y1 = history.history['precision']
+    y2 = history.history['val_precision']
+
+    min_y = min(min(y1), min(y2))-ylim_pad[1]
+    max_y = max(max(y1), max(y2))+ylim_pad[1]
+
+
+    plt.subplot(223)
+
+    plt.plot(y1)
+    plt.plot(y2)
+
+    plt.title('Model Precision\n'+date_time(1), fontsize=17)
+    plt.xlabel(xlabel, fontsize=15)
+    plt.ylabel('Precision', fontsize=15)
+    plt.ylim(min_y, max_y)
+    plt.legend(legends, loc='upper left')
+    plt.grid()
+
+    y1 = history.history['recall']
+    y2 = history.history['val_recall']
+
+    min_y = min(min(y1), min(y2))-ylim_pad[1]
+    max_y = max(max(y1), max(y2))+ylim_pad[1]
+
+
+    plt.subplot(224)
+
+    plt.plot(y1)
+    plt.plot(y2)
+
+    plt.title('Model Recall\n'+date_time(1), fontsize=17)
+    plt.xlabel(xlabel, fontsize=15)
+    plt.ylabel('Recall', fontsize=15)
+    plt.ylim(min_y, max_y)
+    plt.legend(legends, loc='upper left')
+    plt.grid()
     if figure_directory:
         plt.savefig(figure_directory+"/history")
 
     plt.show()
 #in [7] padding is used to fill out null values
-def padding(trained_seq, test_seq):
-    #you can change MAX_LEN to train_data.shape[1]
-    trained_seq_trunc = pad_sequences(trained_seq)
-    test_seq_trunc = pad_sequences(test_seq, maxlen=MAX_LEN)
+def padding(trained_seq, test_seq,input):
+    
+    
+    trained_seq_trunc = pad_sequences(trained_seq,maxlen=MAX_LEN)
+    
+    test_seq_trunc = pad_sequences(test_seq,maxlen=MAX_LEN)
+    print(trained_seq_trunc.shape)
+    print(test_seq_trunc.shape)
     result = [trained_seq_trunc, test_seq_trunc]
     return result
-def we_output_data_transform(y_data,encoding=None):
-    if encoding == None:
-        y_data = to_categorical(np.asarray(y_data))
+def load_embed(file):
+    def get_coefs(word,*arr): 
+        return word, np.asarray(arr, dtype='float32')
+    
+    if file == './cc.sv.300.vec':
+        embeddings_index = dict(get_coefs(*o.split(" ")) for o in open(file) if len(o)>100)
     else:
-        le = LabelEncoder()
-        y_train_le = le.fit_transform(y_data)
-        y_data = to_categorical(y_train_le)
-    result = y_data
+        embeddings_index = dict(get_coefs(*o.split(" ")) for o in open(file, encoding='latin'))
+        
+    return embeddings_index
+def we_output_data_transform(y_train,y_test,encoding='binary',category=None):
+    if encoding == 'multi':
+        '''
+        From Peter Nagy, Kaggle, https://www.kaggle.com/ngyptr/multi-class-classification-with-lstm
+        '''
+        with open('df.pickle', 'rb') as handle:
+            df = pickle.load(handle)
+        df1 = df['freetext']
+        df2 = df['pout']
+        frames = [df1,df2]
+        data = pd.concat(frames, axis=1, sort=False)
+        num_of_categories = df.count+1
+        shuffled = data.reindex(np.random.permutation(data.index))
+        prio1A = shuffled[shuffled['pout'] == '1A'][:num_of_categories]
+        prio1B = shuffled[shuffled['pout'] == '1B'][:num_of_categories]
+        prio2A = shuffled[shuffled['pout'] == '2A'][:num_of_categories]
+        prio2B = shuffled[shuffled['pout'] == '2B'][:num_of_categories]
+        Referal = shuffled[shuffled['pout'] == 'Referal'][:num_of_categories]
+        concated = pd.concat([prio1A,prio1B,prio2A,prio2B,Referal], ignore_index=True)
+        concated = concated.reindex(np.random.permutation(concated.index))
+        concated['LABEL'] = 0
+        concated.loc[concated['pout'] == '1A', 'LABEL'] = 0
+        concated.loc[concated['pout'] == '1B', 'LABEL'] = 1
+        concated.loc[concated['pout'] == '2A', 'LABEL'] = 2
+        concated.loc[concated['pout'] == '2B', 'LABEL'] = 3
+        concated.loc[concated['pout'] == 'Referal', 'LABEL'] = 4
+        labels = to_categorical(concated['LABEL'], num_classes=5)
+        if 'pout' in concated.keys():
+            concated.drop(['pout'], axis=1)
+        return concated,labels
+    else:
+        #le = LabelEncoder()
+        #y_train_le = le.fit_transform(y_train.values)
+        #y_test_le = le.fit_transform(y_test.values)
+        y_train = np.array(y_train.values)
+        y_test = np.array(y_test.values)
+    result = [y_train,y_test]
     return result
 #embeddings layer
 def embeddings_layer(X_train_emb, X_valid_emb,y_train_emb,y_valid_emb,dense):
     emb_model = models.Sequential()
-    emb_model.add(layers.Embedding(NB_WORDS, 8, input_length=MAX_LEN))
+    emb_model.add(layers.Embedding(NB_WORDS, DIM, input_length=MAX_LEN))
     emb_model.add(layers.Flatten())
     emb_model.add(layers.Dense(dense, activation='softmax'))
     emb_model.summary()
@@ -1225,29 +1789,15 @@ def load_vectors2(fname):
     result = [word_to_vec_map, words_to_index, index_to_words, vocab_size, dim]
     return result
 #from[8]
-def sentences_to_indices(X, word_to_index, maxLen):
-    m = X.shape[0]                                   # number of training examples
-    print(m)
-    X_indices = np.zeros((m, maxLen))
-    for i in range(m):
-        sentence_words = X[i].lower().strip().split()
-        j = 0
-        for w in sentence_words:
-            if w not in word_to_index:
-                w = "person"        #mostly names are not present in vocabulary
-            X_indices[i, j] = word_to_index[w]
-            j = j + 1
-    
-    return X_indices
 #for Word2Vec input word2vec .bin file and word_index = tokenizer.word_index from tokenizer
 def load_vectors_word2vec(fname,word_index):
     word_vectors = KeyedVectors.load(fname)
+    
     vocabulary_size = min(MAX_NB_WORDS, len(word_index))+1
-    print(vocabulary_size)
     embedding_matrix = np.zeros((vocabulary_size, EMBEDDING_DIM))
     
     for word, i in word_index.items():
-        if i>=MAX_NB_WORDS:
+        if i>=NB_WORDS:
             continue
         try:
             embedding_vector = word_vectors[word]
@@ -1255,10 +1805,47 @@ def load_vectors_word2vec(fname,word_index):
         except KeyError:
             embedding_matrix[i]=np.random.normal(0,np.sqrt(0.25),EMBEDDING_DIM)
     del(word_vectors)
-    embedding_layer = Embedding(vocabulary_size,EMBEDDING_DIM,weights=[embedding_matrix],trainable=True)
+    embedding_layer = Embedding(NB_WORDS,EMBEDDING_DIM,weights=[embedding_matrix],trainable=False)
+    embedding_layer.build(MAX_LEN)
     return embedding_layer
+def build_vocab(texts):
+    sentences = texts.apply(lambda x: x.split()).values
+    vocab = {}
+    for sentence in sentences:
+        for word in sentence:
+            try:
+                vocab[word] += 1
+            except KeyError:
+                vocab[word] = 1
+    return vocab
+def check_coverage(vocab, embeddings_index):
+    known_words = {}
+    unknown_words = {}
+    nb_known_words = 0
+    nb_unknown_words = 0
+    for word in vocab.keys():
+        try:
+            known_words[word] = embeddings_index[word]
+            nb_known_words += vocab[word]
+        except:
+            unknown_words[word] = vocab[word]
+            nb_unknown_words += vocab[word]
+            pass
+
+    print('Found embeddings for {:.2%} of vocab'.format(len(known_words) / len(vocab)))
+    print('Found embeddings for  {:.2%} of all text'.format(nb_known_words / (nb_known_words + nb_unknown_words)))
+    unknown_words = sorted(unknown_words.items(), key=operator.itemgetter(1))[::-1]
+
+    return unknown_words
+def add_lower(embedding, vocab):
+    count = 0
+    for word in vocab:
+        if word in embedding and word.lower() not in embedding:  
+            embedding[word.lower()] = embedding[word]
+            count += 1
+    print(f"Added {count} words to embedding")
 #[8]
-def pretrained_embedding_layer(word_to_vec_map, word_to_index):
+def pretrained_embedding_layer(word_to_vec_map, word_to_index,embeddings_index):
     vocab_len = len(word_to_index) + 1
     #emb_dim = word_to_vec_map["cucumber"].shape[0]
     emb_dim = 300
@@ -1270,127 +1857,285 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index):
     
     for word, index in word_to_index.items():
         emb_matrix[index, :] = word_to_vec_map[word]
+        
+    embedding_layer = Embedding(vocab_len, emb_dim,embeddings_initializer=Constant(emb_matrix),
+    input_length = MAX_SEQUENCE_LENGTH,trainable=False) 
 
-    embedding_layer = Embedding(input_dim = vocab_len, output_dim = emb_dim, trainable = False) 
-
-    embedding_layer.build((None,))
-    embedding_layer.set_weights([emb_matrix])
     
     return embedding_layer
-#CNN
-def cnn2(input_shape,embedding_layer1,dense):
-    print(input_shape)
-    sentence_indices = Input(shape=(input_shape,))
-    
-    embedding = embedding_layer1(sentence_indices)
-    
-    reshape = Reshape((input_shape,EMBEDDING_DIM,1))(embedding)
-    conv_0 = Conv2D(num_filters, (filter_sizes[0], EMBEDDING_DIM),activation='relu',kernel_regularizer=regularizers.l2(0.01))(reshape)
-    conv_1 = Conv2D(num_filters, (filter_sizes[1], EMBEDDING_DIM),activation='relu',kernel_regularizer=regularizers.l2(0.01))(reshape)
-    conv_2 = Conv2D(num_filters, (filter_sizes[2], EMBEDDING_DIM),activation='relu',kernel_regularizer=regularizers.l2(0.01))(reshape)
-
-    maxpool_0 = MaxPooling2D((input_shape - filter_sizes[0] + 1, 1), strides=(1,1))(conv_0)
-    maxpool_1 = MaxPooling2D((input_shape - filter_sizes[1] + 1, 1), strides=(1,1))(conv_1)
-    maxpool_2 = MaxPooling2D((input_shape - filter_sizes[2] + 1, 1), strides=(1,1))(conv_2)
-
-    merged_tensor = concatenate([maxpool_0, maxpool_1, maxpool_2], axis=1)
-    flatten = Flatten()(merged_tensor)
-    reshape = Reshape((3*num_filters,))(flatten)
-    dropout = Dropout(drop)(flatten)
-    output = Dense(units=dense, activation='softmax',kernel_regularizer=regularizers.l2(0.01))(dropout)
-
-    # this creates a model that includes
-    model = Model(sentence_indices, output)
-    print(model.summary())
-    return model
-#from [8] a CNN approach
-def cnn1(input_shape,embedding_layer1,dense):
-    
-    sentence_indices = Input(shape=input_shape, dtype='int32')
-
-    embeddings = embedding_layer1(sentence_indices) 
-
-    X1 = Conv1D(128, 3)(embeddings)
-    X2 = Conv1D(128, 3)(embeddings)
-    X1 = MaxPooling1D(pool_size=4)(X1)
-    X2 = MaxPooling1D(pool_size=5)(X2)
-    X = Concatenate(axis=1)([X1, X2])
-    X = GRU(units=128, dropout=0.4, return_sequences=True)(X)
-    X = LSTM(units=128, dropout=0.3)(X)
-    X = Dense(units = 32, activation="relu")(X)
-    X = Dense(units=dense, activation='softmax')(X)
-    model = Model(inputs=sentence_indices, outputs=X)
-    print(model.summary())
-    return model
-def gru_model(dense):
+#bilstm
+def bilstm(embedding_layer1,dense):
     model = Sequential()
-    model.add(Embedding(NB_WORDS, embed_dim, input_length=MAX_LEN))
-    model.add(GRU(embed_dim))
-    model.add(Dense(dense, activation='sigmoid'))
-    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.add(embedding_layer1)
+    model.add(Bidirectional(LSTM(117)))
+    model.add(LeakyReLU(alpha=0.01))
+    model.add(Dense(dense))
+    #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
+    adam = Adam(lr=0.001,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'categorical_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score])
+    print(model.summary())
+    return model
+def cnn2(embedding_layer1,dense):
+    
+    model = Sequential()
+    model.add(embedding_layer1)
+    model.add(Conv1D(filters, kernel_size, padding='valid', strides=1))
+    model.add(MaxPooling1D(pool_size=pool_size))
+    model.add(LeakyReLU(alpha=0.01))
+    model.add(LSTM(117,return_sequences=True))
+    
+    model.add(Dense(dense))
+    #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
+    adam = Adam(lr=0.001,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'categorical_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score])
+    print(model.summary())
+    return model
+def cnn1(embedding_layer1,dense):
+    
+    model = Sequential()
+    model.add(embedding_layer1)
+    model.add(Conv1D(filters, kernel_size, padding='valid', strides=1))
+    model.add(LeakyReLU(alpha=0.01))
+    model.add(MaxPooling1D(pool_size=pool_size))
+    model.add(Bidirectional(LSTM(117)))
+    model.add(Dense(dense))
+    #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
+    adam = Adam(lr=0.001,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'categorical_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score])
+    print(model.summary())
+    return model
+def gru_model(embedding_layer1,dense):
+    
+    
+    model = Sequential()
+    model.add(embedding_layer1)
+    model.add(GRU(117))
+    #model.add(ELU(alpha=1.0))
+    #model.add(Dense(234))
+    #model.add(Dense(3))
+    model.add(LeakyReLU(alpha=0.01))
+    model.add(Dense(dense))
+    #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
+    #adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics = ['accuracy',precision,recall,f1_score1])
     print(model.summary())
     
     return model
-def lstm_model(dense):
+def lstm_model(embedding_layer1,dense):
+    
     model = Sequential()
-    model.add(Embedding(NB_WORDS, embed_dim,input_length = MAX_LEN))
-    model.add(SpatialDropout1D(0.4))
-    model.add(LSTM(lstm_out, dropout=0.2, recurrent_dropout=0.2))
-    model.add(Dense(dense,activation='softmax'))
-    model.compile(loss = 'categorical_crossentropy', optimizer='adam',metrics = ['accuracy'])
+    model.add(embedding_layer1)
+    model.add(LSTM(117))
+    #model.add(ELU(alpha=1.0))
+    #model.add(Dense(234,activation='elu',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    #model.add(Dense(3,activation='elu'))
+    model.add(LeakyReLU(alpha=0.01))
+    model.add(Dense(dense))
+    #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
+    #adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score1])
     print(model.summary())
     
     return model
     #from https://www.kaggle.com/sakarilukkarinen/embedding-lstm-gru-and-conv1d/versions
-def gru_model2(dense):
-    m4 = Sequential()
-    m4.add(Embedding(NB_WORDS, embed_dim, input_length = MAX_LEN))
-    m4.add(GRU(embed_dim, dropout = 0.1, recurrent_dropout = 0.5, return_sequences = True))
-    m4.add(GRU(embed_dim, activation = 'relu', dropout = 0.1, recurrent_dropout = 0.5))
-    m4.add(Dense(dense, activation = 'softmax'))
-    m4.compile(optimizer = 'rmsprop', loss = 'categorical_crossentropy', metrics = ['acc'])
-    print(m4.summary())
-    return m4
+def gru_model2(embedding_layer1,dense):
+
+    model = Sequential()
+    model.add(embedding_layer1)
+    model.add(Bidirectional(GRU(117)))
+    model.add(LeakyReLU(alpha=0.01))
+    model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
+    adam = Adam(lr=0.009,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'categorical_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score])
+    print(model.summary())
+    return model
 def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y_val,dense):
-    callbacks = [EarlyStopping(monitor='val_loss')]
-    adam = Adam(lr=1e-3)
+    callbacks = [EarlyStopping(monitor='val_loss',patience=2)]
     #you can also use rmsprop as optimizer
-    loss = 'categorical_crossentropy'
+    #adam = Adam(lr=1e-3)
+    #kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=seed)
+    #loss = 'categorical_crossentropy'
     if model_type == 'cnn1':
-        model = cnn1((MAX_LEN,),embedding_layer,dense)
-        model.compile(loss=loss,optimizer=adam,metrics=['acc'])
-        track = model.fit(X_train, y_train, batch_size=128, epochs=10, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
-        plot_function(track)
-        model = track
+        
+        '''
+        a=0
+        b=0
+        c=0
+        d=0
+        e=0
+        f=0
+        g=0
+        h=0
+        i=0
+        j=0
+        batch_size1 = [100, 200, 400, 600, 800, 1000,2000,2500]
+        epochs1 = [1,2,3,4,5,6,7,8]
+        optimizer1 = ['SGD', 'RMSprop', 'Adagrad', 'Adadelta', 'Adam', 'Adamax', 'Nadam','Adam']
+        learn_rate1 = [0.001,0.002,0.005, 0.01,0.015, 0.1, 0.2, 0.3]
+        momentum1 = [0.0, 0.2,0.3, 0.4,0.5, 0.6, 0.8, 0.9]
+        init_mode1 = ['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+        activation1 = ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+        weight_constraint1 = [1,1.5, 2,2.5, 3,3.5, 4, 5]
+        dropout_rate1 = [0.001,0.1,0.11,0.15, 0.2, 0.3, 0.4, 0.5]
+        neurons1 = [50, 100, 150, 200, 250, 300, 350,400]
+        model = cnn1(embedding_layer,dense,optimizer1[a],learn_rate1[b],momentum1[c],init_mode1[d],activation1[e],weight_constraint1[f],dropout_rate1[g],neurons1[h])
+        track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
+        '''
+        model = cnn1(embedding_layer,dense)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=1000,verbose=1,validation_data=(X_val, y_val))
+        plot_performance(track)
     elif model_type == 'cnn2':
-        model1 = cnn2(X_train.shape[1],embedding_layer,dense)
-        model1.compile(loss=loss,optimizer=adam,metrics=['acc'])
-        track2 = model1.fit(X_train, y_train, batch_size=1000, epochs=10, verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
-        plot_function(track2)
-        model = track2
+        '''
+        a=0
+        b=0
+        c=0
+        d=0
+        e=0
+        f=0
+        g=0
+        h=0
+        i=0
+        j=0
+        batch_size1 = [100, 200, 400, 600, 800, 1000,2000,2500]
+        epochs1 = [1,2,3,4,5,6,7,8]
+        optimizer1 = ['SGD', 'RMSprop', 'Adagrad', 'Adadelta', 'Adam', 'Adamax', 'Nadam','Adam']
+        learn_rate1 = [0.001,0.002,0.005, 0.01,0.015, 0.1, 0.2, 0.3]
+        momentum1 = [0.0, 0.2,0.3, 0.4,0.5, 0.6, 0.8, 0.9]
+        init_mode1 = ['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+        activation1 = ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+        weight_constraint1 = [1,1.5, 2,2.5, 3,3.5, 4, 5]
+        dropout_rate1 = [0.001,0.1,0.11,0.15, 0.2, 0.3, 0.4, 0.5]
+        neurons1 = [50, 100, 150, 200, 250, 300, 350,400]
+        model = cnn2(embedding_layer,dense,optimizer1[a],learn_rate1[b],momentum1[c],init_mode1[d],activation1[e],weight_constraint1[f],dropout_rate1[g],neurons1[h])
+        track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
+        '''
+        model = cnn2(embedding_layer,dense)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=1000,verbose=1,validation_data=(X_val, y_val))
+        plot_performance(track)
     elif model_type == 'lstm':
-        LSTM_model = lstm_model(dense)
-        #The model has already been compiled in the function call
-        track3 = LSTM_model.fit(X_train, y_train, epochs=3, batch_size=64,validation_data=(X_val, y_val))
-        plot_function(track3)
-        model = track3
+        '''
+        a=0
+        b=0
+        c=0
+        d=0
+        e=0
+        f=0
+        g=0
+        h=0
+        epochs1 = [1,2,3,4,5,6,7,8]
+        optimizer1 = ['SGD', 'RMSprop', 'Adagrad', 'Adadelta', 'Adam', 'Adamax', 'Nadam','Adam']
+        learn_rate1 = [0.001,0.002,0.005, 0.01,0.015, 0.1, 0.2, 0.3]
+        momentum1 = [0.0, 0.2,0.3, 0.4,0.5, 0.6, 0.8, 0.9]
+        init_mode1 = ['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+        activation1 = ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+        weight_constraint1 = [1,1.5, 2,2.5, 3,3.5, 4, 5]
+        dropout_rate1 = [0.001,0.1,0.11,0.15, 0.2, 0.3, 0.4, 0.5]
+        neurons1 = [50, 100, 150, 200, 250, 300, 350,400]
+        model = lstm_model(embedding_layer,dense,optimizer1[a],learn_rate1[b],momentum1[c],init_mode1[d],activation1[e],weight_constraint1[f],dropout_rate1[g],neurons1[h])
+        track = model.fit(X_train, y_train, validation_steps=2, steps_per_epoch=2, batch_size=13, epochs=10, verbose=1,validation_data=(X_val, y_val),callback=callbacks)
+        '''
+        model = lstm_model(embedding_layer,dense)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=1000,verbose=1,validation_data=(X_val, y_val))
+        plot_performance(track)
+    elif model_type == 'bilstm':
+        '''
+        a=0
+        b=0
+        c=0
+        d=0
+        e=0
+        f=0
+        g=0
+        h=0
+        optimizer1 = ['SGD', 'RMSprop', 'Adagrad', 'Adadelta', 'Adam', 'Adamax', 'Nadam','Adam']
+        learn_rate1 = [0.001,0.002,0.005, 0.01,0.015, 0.1, 0.2, 0.3]
+        momentum1 = [0.0, 0.2,0.3, 0.4,0.5, 0.6, 0.8, 0.9]
+        init_mode1 = ['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+        activation1 = ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+        weight_constraint1 = [1,1.5, 2,2.5, 3,3.5, 4, 5]
+        dropout_rate1 = [0.001,0.1,0.11,0.15, 0.2, 0.3, 0.4, 0.5]
+        neurons1 = [50, 100, 150, 200, 250, 300, 350,400]
+        model = bilstm(embedding_layer,dense,optimizer1[a],learn_rate1[b],momentum1[c],init_mode1[d],activation1[e],weight_constraint1[f],dropout_rate1[g],neurons1[h])
+        track = model.fit(X_train, y_train, validation_steps=2, steps_per_epoch=2, batch_size=none, epochs=10, verbose=1,validation_data=(X_val, y_val),callback=callbacks)
+        '''
+        model = bilstm(embedding_layer,dense)
+        track = model.fit(X_train, y_train, epochs=2, batch_size=1000,verbose=1,shuffle=False,validation_data=(X_val, y_val))
+        plot_performance(track)
     elif model_type == 'gru':
-        GRU_model = gru_model(dense)
-        #The model has already been compiled in the function call
-        track2 = GRU_model.fit(X_train, y_train, epochs=3, batch_size=64,verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
-        plot_function(track2)
-        model = track2
-    elif model_type == 'gru2':
-        gru2 = gru_model2(dense)
-        track2 = gru2.fit(X_train, y_train, epochs=3, batch_size=64,verbose=1, validation_data=(X_val, y_val),callbacks=callbacks)
-        plot_function(track2)
-        model = track2
+        '''
+        a=0
+        b=0
+        c=0
+        d=0
+        e=0
+        f=0
+        g=0
+        h=0
+        i=0
+        j=0
+        batch_size1 = [100, 200, 400, 600, 800, 1000,2000,2500]
+        epochs1 = [1,2,3,4,5,6,7,8]
+        optimizer1 = ['SGD', 'RMSprop', 'Adagrad', 'Adadelta', 'Adam', 'Adamax', 'Nadam','Adam']
+        learn_rate1 = [0.001,0.002,0.005, 0.01,0.015, 0.1, 0.2, 0.3]
+        momentum1 = [0.0, 0.2,0.3, 0.4,0.5, 0.6, 0.8, 0.9]
+        init_mode1 = ['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+        activation1 = ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+        weight_constraint1 = [1,1.5, 2,2.5, 3,3.5, 4, 5]
+        dropout_rate1 = [0.001,0.1,0.11,0.15, 0.2, 0.3, 0.4, 0.5]
+        neurons1 = [50, 100, 150, 200, 250, 300, 350,400]
+        model = gru_model(embedding_layer,dense,optimizer1[a],learn_rate1[b],momentum1[c],init_mode1[d],activation1[e],weight_constraint1[f],dropout_rate1[g],neurons1[h])
+        track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
+        '''
+        model = gru_model(embedding_layer,dense)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=1000,verbose=1,validation_data=(X_val, y_val))
+        plot_performance(track)
     else:
-        model = embeddings_layer(X_train,y_train,X_val,y_val,dense)
-        plot_function(model)
+        '''
+        a=0
+        b=0
+        c=0
+        d=0
+        e=0
+        f=0
+        g=0
+        h=0
+        i=0
+        j=0
+        batch_size1 = [100, 200, 400, 600, 800, 1000,2000,2500]
+        epochs1 = [1,2,3,4,5,6,7,8]
+        optimizer1 = ['SGD', 'RMSprop', 'Adagrad', 'Adadelta', 'Adam', 'Adamax', 'Nadam','Adam']
+        learn_rate1 = [0.001,0.002,0.005, 0.01,0.015, 0.1, 0.2, 0.3]
+        momentum1 = [0.0, 0.2,0.3, 0.4,0.5, 0.6, 0.8, 0.9]
+        init_mode1 = ['uniform', 'lecun_uniform', 'normal', 'zero', 'glorot_normal', 'glorot_uniform', 'he_normal', 'he_uniform']
+        activation1 = ['softmax', 'softplus', 'softsign', 'relu', 'tanh', 'sigmoid', 'hard_sigmoid', 'linear']
+        weight_constraint1 = [1,1.5, 2,2.5, 3,3.5, 4, 5]
+        dropout_rate1 = [0.001,0.1,0.11,0.15, 0.2, 0.3, 0.4, 0.5]
+        neurons1 = [50, 100, 150, 200, 250, 300, 350,400]
+        model = gru_model2(embedding_layer,dense,optimizer1[a],learn_rate1[b],momentum1[c],init_mode1[d],activation1[e],weight_constraint1[f],dropout_rate1[g],neurons1[h])
+        track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
+        '''
+        model = gru_model2(embedding_layer,dense)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=1000,verbose=1,validation_data=(X_val, y_val))
+        plot_performance(track)
+    #print("%.2f%% (+/- %.2f%%)" % (numpy.mean(cvscores), numpy.std(cvscores)))
     #model = None
     return model
+def batch_generator(X_data, y_data, batch_size):
+    samples_per_epoch = X_data.shape[0]
+    number_of_batches = samples_per_epoch/batch_size
+    counter=0
+    index = np.arange(np.shape(y_data)[0])
+    while 1:
+        index_batch = index[batch_size*counter:batch_size*(counter+1)]
+        X_batch = X_data[index_batch,:].toarray()
+        y_batch = y_data[y_data.index[index_batch]]
+        counter += 1
+        yield X_batch,y_batch
+        if (counter > number_of_batches):
+            counter=0
 def plot_model_performace(result):
+    
     sns.set_style("ticks")
     figsize=(22, 6)
 
@@ -1414,6 +2159,7 @@ def plot_model_performace(result):
     col1 = "model"
     col2 = "score"
     sns.barplot(x=col1, y=col2, data=result)
+
     plt.title(title.title())
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -1421,7 +2167,60 @@ def plot_model_performace(result):
     plt.grid()
     plt.plot()
     plt.show()
-    print(result)
+def parallelize_dataframe(df, func):
+    df_split = np.array_split(df, num_partitions)
+    pool = Pool(num_cores)
+    df = pd.concat(pool.map(func, df_split), ignore_index=True)
+    pool.close()
+    pool.join()
+    return df
+#to call the function above, do this: parallelize_dataframe(df, cleaning), then pickle
+#from https://stackoverflow.com/questions/43547402/how-to-calculate-f1-macro-in-keras, visited 26th may
+def f1_score1(y_true, y_pred):
+    def recall(y_true, y_pred):
+        """Recall metric.
+        Only computes a batch-wise average of recall.
+        Computes the recall, a metric for multi-label classification of
+        how many relevant items are selected.
+        """
+        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+        recall = true_positives / (possible_positives + K.epsilon())
+        return recall
+
+    def precision(y_true, y_pred):
+        """Precision metric.
+        Only computes a batch-wise average of precision.
+        Computes the precision, a metric for multi-label classification of
+        how many selected items are relevant.
+        """
+        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+        precision = true_positives / (predicted_positives + K.epsilon())
+        return precision
+    precision = precision(y_true, y_pred)
+    recall = recall(y_true, y_pred)
+    return 2*((precision*recall)/(precision+recall+K.epsilon()))
+def recall(y_true, y_pred):
+    """Recall metric.
+    Only computes a batch-wise average of recall.
+    Computes the recall, a metric for multi-label classification of
+    how many relevant items are selected.
+    """
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    possible_positives = K.sum(K.round(K.clip(y_true, 0, 1)))
+    recall = true_positives / (possible_positives + K.epsilon())
+    return recall
+def precision(y_true, y_pred):
+    """Precision metric.
+    Only computes a batch-wise average of precision.
+    Computes the precision, a metric for multi-label classification of
+    how many selected items are relevant.
+    """
+    true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+    predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+    precision = true_positives / (predicted_positives + K.epsilon())
+    return precision
 '''
 [1] https://medium.com/deep-learning-turkey/text-processing-1-old-fashioned-methods-bag-of-words-and-tfxidf-b2340cc7ad4b, Medium, Deniz Kilinc visited 6th of April 2019
 [2] https://www.kaggle.com/reiinakano/basic-nlp-bag-of-words-tf-idf-word2vec-lstm, from ReiiNakano , Kaggle, visited 5th of April 2019
@@ -1432,3 +2231,4 @@ def plot_model_performace(result):
 [7] Kaggle, Bert Carremans, Using Word Embeddings for Sentiment Analysis, https://www.kaggle.com/bertcarremans/using-word-embeddings-for-sentiment-analysis, visited april 11th 2019
 [8] Sentiment Analysis with pretrained Word2Vec, Varun Sharma, Kaggle, https://www.kaggle.com/varunsharmaml/sentiment-analysis-with-pretrained-word2vec, visited 12th of april 2019
 '''
+

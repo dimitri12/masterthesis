@@ -11,13 +11,15 @@ import matplotlib.cm as cmx
 import re
 import scipy as sp
 import io
+from itertools import cycle
 from numpy import array
 import pandas as pd
 import numpy as np
-from wordcloud import WordCloud
+#from wordcloud import WordCloud
 import sklearn.metrics
 import sklearn
 from sklearn.model_selection import cross_val_predict
+from sklearn.preprocessing import label_binarize
 from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.preprocessing import OneHotEncoder, scale 
 from sklearn.model_selection import train_test_split
@@ -29,6 +31,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import make_scorer, f1_score, precision_score, recall_score
 from sklearn.metrics import precision_recall_fscore_support
+from sklearn import tree
 from sklearn.svm import SVC
 import multiprocessing
 from sklearn.model_selection import learning_curve
@@ -42,8 +45,8 @@ import keras.backend as K
 import nltk
 from keras.wrappers.scikit_learn import KerasClassifier
 from nltk.corpus import stopwords
-import scikitplot.plotters as skplt
-from xgboost import XGBClassifier
+#import scikitplot.plotters as skplt
+from sklearn.ensemble import GradientBoostingClassifier
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 from keras.preprocessing.text import Tokenizer
@@ -59,7 +62,7 @@ from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from keras.optimizers import Adam
 from keras.constraints import unit_norm
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.naive_bayes import GaussianNB
+from sklearn.naive_bayes import GaussianNB, BernoulliNB
 from keras.constraints import maxnorm
 from sklearn.svm import LinearSVC,SVC
 from sklearn.ensemble import VotingClassifier
@@ -91,7 +94,7 @@ from gensim.models.wrappers import FastText
 import matplotlib.patches as patches
 import time
 import datetime
-import fastText
+#import fastText
 from gensim.models import word2vec
 import warnings
 import pickle
@@ -106,16 +109,16 @@ warnings.filterwarnings(action='ignore')
 num_partitions = multiprocessing.cpu_count()
 num_cores = multiprocessing.cpu_count()
 #Global Variables from [7] and others
-NB_WORDS = 9501  # Parameter indicating the number of words we'll put in the dictionary 
+NB_WORDS = 4037069  # Parameter indicating the number of words we'll put in the dictionary 
 
 VAL_SIZE = 9  # Size of the validation set (originally 1000)
 NB_START_EPOCHS = 8  # Number of epochs we usually start to train with
 BATCH_SIZE = 512  # Size of the batches used in the mini-batch gradient descent
-MAX_LEN = 72  # Maximum number of words in a sequence
-#MAX_LEN = 62
+#MAX_LEN = 117  # Maximum number of words in a sequence
+MAX_LEN = 72
 GLOVE_DIM = 50  # Number of dimensions of the GloVe word embeddings
-MAX_SEQUENCE_LENGTH = 456
-MAX_NB_WORDS = 20000
+MAX_SEQUENCE_LENGTH = 463
+MAX_NB_WORDS = 9501
 EMBEDDING_DIM = 100
 VALIDATION_SPLIT = 0.1
 #activation function
@@ -135,6 +138,8 @@ kernel_size = 5
 filters = 64
 pool_size = 4
 lstm_output_size = 70
+seed = 7
+np.random.seed(seed)
 #model2 = fastText.train_supervised('./fasttext_train.txt',label='label_', epoch=20, dim=200)
 
 def cleaning(s):
@@ -156,7 +161,6 @@ def clean_text(txt):
     txt = "".join(v for v in txt if v not in string.punctuation).lower()
     txt = txt.encode("utf8").decode('utf8', 'ignore')
     return txt
-
 def build_corpus(data):
     "Creates a list of lists containing words from each sentence"
     data['FreeText'] = [cleaning(s) for s in data['FreeText']]
@@ -203,7 +207,6 @@ def tsne_plot(df):
                      ha='right',
                      va='bottom')
     plt.show()
-
 def transformAge(df):
     '''
     This function will categorise the age data into 5 different age categories
@@ -224,7 +227,6 @@ def transformAge(df):
             array.append(4)
     df["AgeCat"] = array
     return df
-
 def transformLCD(df):
     '''
     This function will transform the numerical LCD data into 3 categories
@@ -240,10 +242,8 @@ def transformLCD(df):
             array.append(2)
     df["LcdCat"] = array
     return df
-
 def test_code(input):
     print("Hello " + input)
-
 def eda1(df):
     figsize=(20, 10)
     
@@ -362,7 +362,7 @@ def eda2(df):
     print("NB_WORDS is:")
     print(NB_WORDS)
     #word EDA
-    #dummies2 = df.iloc[:,1:2]
+    dummies2 = df.iloc[:,1:2]
     #tsne_plot(dummies2)
     #wordcloud
     df['FreeText'] = [cleaning(s) for s in df['freetext'].astype(str)]
@@ -374,25 +374,6 @@ def eda2(df):
     #plt.figure(figsize=(20,10))
     #pd.value_counts(xt).plot(kind="barh")
     #plt.show()
-    
-def word_cloud(input_data,title=None):
-    wordcloud = WordCloud(
-        background_color = 'white',
-        max_words = 200,
-        max_font_size = 40, 
-        scale = 3,
-        random_state = 42
-    ).generate(str(input_data))
-
-    fig = plt.figure(1, figsize = (20, 20))
-    plt.axis('off')
-    if title: 
-        fig.suptitle(title, fontsize = 20)
-        fig.subplots_adjust(top = 2.3)
-
-    plt.imshow(wordcloud)
-    plt.show()
-    
 #preprocessing function. use the dummies as input
 def pre_processing1(input,df):
     sentence = [None] * df.shape[0]
@@ -407,7 +388,6 @@ def pre_processing1(input,df):
         sentence1 = [x for x in sentence if x is not None]
     values = array(sentence1)
     return values
-
 #this methods is courtesy from [1], it is an alternative preprocessing method that also uses stop words removal and normalization (in the main section)
 def pre_processing2(input):
     #np.vectorize(input)
@@ -425,7 +405,6 @@ def pre_processing2(input):
     filtered_tokens = [token for token in tokens if token not in stop_word_list]
     result = ' '.join(filtered_tokens)
     return result
-
 #this function is used to transform string data into float data: e.g. Pout (String) to NewPout (float) using a scoring method where the highest value is the highest priority
 def transform_output_data(output_dataframe,datatype=None):
     
@@ -597,7 +576,7 @@ def text_processing(input_data, output_data, processing_method=None, truncated=N
 #split data into train and test data
 def feature_engineering(input_data, output_data):
     #alternative 1
-    X_train, X_test, y_train, y_test = train_test_split(input_data, output_data, test_size=0.3, random_state=37)
+    X_train, X_test, y_train, y_test = train_test_split(input_data, output_data, test_size=0.3, random_state=None)
     '''
     #alternative 2
     X_train, X_test, y_train, y_test = train_test_split(input_data, output_data, test_size=0.3)
@@ -635,6 +614,11 @@ def predictor(data_array,method,multiclass):
         RFres_tfidf = initiate_predictions(data_array[1],method,multiclass)
         result = [RFres_BoW,RFres_tfidf]
         return result
+    elif method == 'tree':
+        treeres_BoW = initiate_predictions(data_array[0],method,multiclass)
+        treeres_tfidf = initiate_predictions(data_array[1],method,multiclass)
+        result = [treeres_BoW,treeres_tfidf]
+        return result
     elif method == 'GB':
         GBres_BoW = initiate_predictions(data_array[0],method,multiclass)
         GBres_tfidf = initiate_predictions(data_array[1],method,multiclass)
@@ -650,26 +634,28 @@ def predictor(data_array,method,multiclass):
 def generate_metrics(result,clf=None):
     title = ['Bow','TFIDF']
     if clf == 'NBG':
-        val = 'Naive_Bayes_Gaussian'
+        val = ['Naive_Bayes_Gaussian','Naive_Bayes_Gaussian']
     elif clf == 'NBM':
-        val = 'Naive_Bayes_Multinomial'
+        val = ['Naive_Bayes_Multinomial','Naive_Bayes_Multinomial']
     elif clf == 'SVM':
-        val = 'Support_Vector_Machine'
+        val = ['Support_Vector_Machine','Support_Vector_Machine']
     elif clf == 'RF':
-        val = 'Random_Forest'
+        val = ['Random_Forest','Random_Forest']
     elif clf == 'ensemble':
-        val = 'Ensemble'
-    elif clf == 'gb':
-        val = 'Gradient_Boosting'
+        val = ['Ensemble','Ensemble']
+    elif clf == 'GB':
+        val = ['Gradient_Boosting','Gradient_Boosting']
+    elif clf == 'tree':
+        val = ['Decision Tree','Decision Tree']
     else:
-        val = 'Logistic_Regression'
+        val = ['Logistic_Regression','Logistic_Regression']
     print('Metrics from Bag of Words on '+ val +':')
     print('-'*30)
-    result_from_predicitions(result[0])
+    result_from_predicitions(result[0],title[0])
     print('-'*30)
     print('Metrics from TF-IDF on '+ val +':')
     print('-'*30)
-    result_from_predicitions(result[1])
+    result_from_predicitions(result[1],title[1])
     print('-'*200)
     plot_classification_report(result[0],result[1],title,val)
     print('\nPrediction Confusion Matrix:')
@@ -679,296 +665,58 @@ def generate_metrics(result,clf=None):
     print('-'*200)
     cm2 = metrics.confusion_matrix(y_true=result[1][0], y_pred=result[1][1])
     print(cm2)
-    plot_cm(cm1,cm2,val)
-    print('-'*200)
-    print('Metrics from Bag of Words on '+ val +':')
-    print('-'*30)
-    result_from_predicitions2(result[0])
-    print('-'*30)
-    print('Metrics from TF-IDF on '+ val +':')
-    print('-'*30)
-    result_from_predicitions2(result[1])
-    print('-'*200)
-    plot_classification_report2(result[0],result[1],title,val)
-    print('\nPrediction Confusion Matrix:')
-    print('-'*200)
-    cm1 = metrics.confusion_matrix(y_true=result[0][0], y_pred=result[0][4])
-    print(cm1)
-    print('-'*200)
-    cm2 = metrics.confusion_matrix(y_true=result[1][0], y_pred=result[1][4])
-    print(cm2)
-    plot_cm2(cm1,cm2,val)
+    plot_cm(cm1,cm2,title,val)
     print('-'*200)
 def train_predict_model(classifier,X_train,X_test, y_train, y_test,multiclass):
     # build model
     assert X_train.shape[0] == y_train.shape[0]
     assert X_test.shape[0] == y_test.shape[0]
-    # Choose some parameter combinations to try
-    
-
-    # Type of scoring used to compare parameter combinations
-    acc_scorer = make_scorer(accuracy_score)
-    kfolds = StratifiedKFold(n_splits=2, shuffle=True, random_state=1)
-    '''
-    # Run the grid search
-    grid_obj = GridSearchCV(clf, parameters, scoring=acc_scorer)
-    grid_obj = grid_obj.fit(X_train, y_train)
-
-    # Set the clf to the best combination of parameters
-    clf = grid_obj.best_estimator_
-
-    # Fit the best algorithm to the data. 
-    clf.fit(X_train, y_train)
-    '''
-
     if classifier == 'NBG':
-        train_sizes=np.linspace(.1, 1.0, 15)
-        model = GaussianNB()
-        print(model.get_params().keys())
-        parameters = {'var_smoothing': ( 1e-9,5e-10, 1e-10)}
-        grid_obj = GridSearchCV(model, parameters,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
-        start_time = time.time()
-        grid_obj = grid_obj.fit(X_train, y_train)
-        print("Execution time: " + str((time.time() - start_time)) + ' ms')
-        clf = grid_obj.best_estimator_
-        clf.fit(X_train, y_train)
-        predicted1= clf.predict(X_test)
-        print(clf)
-        pred_prob1 = clf.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, pred_prob1)
-        acc = accuracy_score(y_test, predicted1)
-        f1 = f1_score(y_test, predicted1)
-        prec = precision_score(y_test, predicted1)
-        rec = recall_score(y_test, predicted1)
-        print("Grid search classifier")
-        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
-        print(result)
-
-        rand_obj = RandomizedSearchCV(model, parameters,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
-        start_time = time.time()
-        rand_obj = rand_obj.fit(X_train, y_train)
-        print("Execution time: " + str((time.time() - start_time)) + ' ms')
-        clf2 = rand_obj.best_estimator_
-        clf2.fit(X_train, y_train)
-        predicted2 = clf2.predict(X_test)
-        print(clf2)
-        pred_prob2 = clf2.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, pred_prob2)
-        acc = accuracy_score(y_test, predicted2)
-        f1 = f1_score(y_test, predicted2)
-        prec = precision_score(y_test, predicted2)
-        rec = recall_score(y_test, predicted2)
-        print("Rand search classifier")
-        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
-        print(result)
-        #title = "learning curve for Naive Bayes"
-        #plot_learning_curve(clf,title,X_train, y_train, ylim=(0, 1.01),cv=kfolds,n_jobs=-1,train_sizes=train_sizes)
-        #plt.show()
+        model = BernoulliNB()
+        print(model)
+    elif classifier == 'NBM':
+        model = MultinomialNB()
     elif classifier == 'SVM':
-        train_sizes=np.linspace(.1, 1.0, 15)
-        model = SVC(C=1, probability=True)
-        param_grid = {'C':[0.5,1.0,2.0, 3.0],  # penalty parameter C of the error term
-              'kernel':['linear', 'rbf'], # specifies the kernel type to be used in the algorithm  
-              'gamma':[0.02, 0.08,0.2,1.0] # kernel coefficient for 'rbf'
-             }
-        grid_obj = GridSearchCV(model, param_grid,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
-        start_time = time.time()
-        grid_obj = grid_obj.fit(X_train, y_train)
-        print("Execution time: " + str((time.time() - start_time)) + ' ms')
-        clf = grid_obj.best_estimator_
-        clf.fit(X_train, y_train)
-        predicted1 = clf.predict(X_test)
-        print(clf)
-        pred_prob1 = clf.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, pred_prob1)
-        acc = accuracy_score(y_test, predicted1)
-        f1 = f1_score(y_test, predicted1)
-        prec = precision_score(y_test, predicted1)
-        rec = recall_score(y_test, predicted1)
-        print("Grid search classifier")
-        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
-        print(result)
-
-        rand_obj = RandomizedSearchCV(model, param_grid,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
-        start_time = time.time()
-        rand_obj = rand_obj.fit(X_train, y_train)
-        print("Execution time: " + str((time.time() - start_time)) + ' ms')
-        clf2 = rand_obj.best_estimator_
-        clf2.fit(X_train, y_train)
-        predicted2 = clf2.predict(X_test)
-        print(clf2)
-        pred_prob2 = clf2.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, pred_prob2)
-        acc = accuracy_score(y_test, predicted2)
-        f1 = f1_score(y_test, predicted2)
-        prec = precision_score(y_test, predicted2)
-        rec = recall_score(y_test, predicted2)
-        print("Rand search classifier")
-        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
-        print(result)
+        model = SVC(kernel='linear',probability=True)
+        print(model)
     elif classifier == 'RF':
-        model = RandomForestClassifier(n_estimators=50, random_state=1,n_jobs = -1)
-        param = {'n_estimators': [4, 6, 9], 
-              'max_features': ['log2', 'sqrt','auto'], 
-              'criterion': ['entropy', 'gini'],
-              'max_depth': [2, 3, 5, 10], 
-              'min_samples_split': [2, 3, 5],
-              'min_samples_leaf': [1,5,8]
-             }
-        grid_obj = GridSearchCV(model, param,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
-        start_time = time.time()
-        grid_obj = grid_obj.fit(X_train, y_train)
-        print("Execution time: " + str((time.time() - start_time)) + ' ms')
-        clf = grid_obj.best_estimator_
-        clf.fit(X_train, y_train)
-        predicted1 = clf.predict(X_test)
-        print(clf)
-        pred_prob1 = clf.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, pred_prob1)
-        acc = accuracy_score(y_test, predicted1)
-        f1 = f1_score(y_test, predicted1)
-        prec = precision_score(y_test, predicted1)
-        rec = recall_score(y_test, predicted1)
-        print("Grid search classifier")
-        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
-        print(result)
-
-        rand_obj = RandomizedSearchCV(model, param,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
-        start_time = time.time()
-        rand_obj = rand_obj.fit(X_train, y_train)
-        print("Execution time: " + str((time.time() - start_time)) + ' ms')
-        clf2 = rand_obj.best_estimator_
-        clf2.fit(X_train, y_train)
-        predicted2 = clf2.predict(X_test)
-        print(clf2)
-        pred_prob2 = clf2.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, pred_prob2)
-        acc = accuracy_score(y_test, predicted2)
-        f1 = f1_score(y_test, predicted2)
-        prec = precision_score(y_test, predicted2)
-        rec = recall_score(y_test, predicted2)
-        print("Rand search classifier")
-        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
-        print(result)
-        title = "learning curve for random forest"
-        plot_learning_curve(clf,title,X_train, y_train, ylim=(0, 1.01),cv=kfolds,n_jobs=-1,train_sizes=train_sizes)
-        plt.show()
+        model = RandomForestClassifier(n_estimators=50, random_state=1)
+        print(model)
     elif classifier == 'ensemble':
-        model1 = XGBClassifier(n_estimators=100)
-        model2 = LogisticRegression(n_jobs = -1)
-        model3 = RandomForestClassifier(n_estimators=50, random_state=1,n_jobs = -1)
-        model4 = GaussianNB()
-        model = VotingClassifier(estimators=[('gb', model1), ('lr', model2), ('rf', model3),('nb',model4)], voting='soft')
-        #model.fit(X_train, y_train)
-        model.fit(X_train, y_train)
-        #model.fit(X_train, y_train)
-        # predict using model
-        predicted1 = model.predict(X_test)
-        pred_prob1 = model.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, pred_prob1)
-        acc = accuracy_score(y_test, predicted1)
-        f1 = f1_score(y_test, predicted1)
-        prec = precision_score(y_test, predicted1)
-        rec = recall_score(y_test, predicted1)
-        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
-        print(result)
+        model1 = BernoulliNB()
+        model2 = LogisticRegression()
+        model3 = RandomForestClassifier(n_estimators=50, random_state=1)
+        model = VotingClassifier(estimators=[('nb', model1), ('lr', model2)], voting='soft')
+        print(model)
     elif classifier == 'GB':
-        model = XGBClassifier(n_estimators=100)
-        parameters = {
-        "loss":["deviance"],
-        "learning_rate": [0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2],
-        "min_samples_split": np.linspace(0.1, 0.5, 12),
-        "min_samples_leaf": np.linspace(0.1, 0.5, 12),
-        "max_depth":[3,5,8],
-        "max_features":["log2","sqrt"],
-        "criterion": ["friedman_mse",  "mae"],
-        "subsample":[0.5, 0.618, 0.8, 0.85, 0.9, 0.95, 1.0],
-        "n_estimators":[10]
-        }
-        grid_obj = GridSearchCV(model, parameters,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
-        start_time = time.time()
-        grid_obj = grid_obj.fit(X_train, y_train)
-        print("Execution time: " + str((time.time() - start_time)) + ' ms')
-        clf = grid_obj.best_estimator_
-        clf.fit(X_train, y_train)
-        predicted1 = clf.predict(X_test)
-        print(clf)
-        pred_prob1 = clf.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, pred_prob1)
-        acc = accuracy_score(y_test, predicted1)
-        f1 = f1_score(y_test, predicted1)
-        prec = precision_score(y_test, predicted1)
-        rec = recall_score(y_test, predicted1)
-        print("Grid search classifier")
-        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
-        print(result)
-
-        rand_obj = RandomizedSearchCV(model, parameters,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
-        start_time = time.time()
-        rand_obj = rand_obj.fit(X_train, y_train)
-        print("Execution time: " + str((time.time() - start_time)) + ' ms')
-        clf2 = rand_obj.best_estimator_
-        clf2.fit(X_train, y_train)
-        predicted2 = clf2.predict(X_test)
-        print(clf2)
-        pred_prob2 = clf2.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, pred_prob2)
-        acc = accuracy_score(y_test, predicted2)
-        f1 = f1_score(y_test, predicted2)
-        prec = precision_score(y_test, predicted2)
-        rec = recall_score(y_test, predicted2)
-        print("Rand search classifier")
-        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
-        print(result)
-        title = "learning curve for gradient boosting"
-        plot_learning_curve(clf,title,X_train, y_train, ylim=(0, 1.01),cv=kfolds,n_jobs=-1,train_sizes=train_sizes)
-        plt.show()
+        model = GradientBoostingClassifier()
+        print(model)
+    elif classifier == 'tree':
+        model = tree.DecisionTreeClassifier(random_state=0)
+        print(model)
     else:
-        train_sizes=np.linspace(.1, 1.0, 15)
-        model = LogisticRegression(n_jobs = -1)
-        params = { 'C' : [1.1,1.25,1.5]}
-        grid_obj = GridSearchCV(model, params,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
-        start_time = time.time()
-        grid_obj = grid_obj.fit(X_train, y_train)
-        print("Execution time: " + str((time.time() - start_time)) + ' ms')
-        clf = grid_obj.best_estimator_
-        clf.fit(X_train, y_train)
-        predicted1 = clf.predict(X_test)
-        print(clf)
-        pred_prob1 = clf.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, pred_prob1)
-        acc = accuracy_score(y_test, predicted1)
-        f1 = f1_score(y_test, predicted1)
-        prec = precision_score(y_test, predicted1)
-        rec = recall_score(y_test, predicted1)
-        print("Grid search classifier")
-        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
-        print(result)
+        if multiclass == 'yes':
+            model = LogisticRegression(multi_class = 'multinomial', solver = 'lbfgs')
+        else:
+            model = LogisticRegression()
+            print(model)
+    model.fit(X_train, y_train)
+    # predict using model
+    predicted = model.predict(X_test)
+    if (classifier != 'SVM' or classifier != 'ensemble'):
+        pred_prob = model.predict_proba(X_test)[:,1]
 
-        rand_obj = RandomizedSearchCV(model, params,cv=kfolds, scoring=acc_scorer,verbose=1,n_jobs=-1)
-        start_time = time.time()
-        rand_obj = rand_obj.fit(X_train, y_train)
-        print("Execution time: " + str((time.time() - start_time)) + ' ms')
-        clf2 = rand_obj.best_estimator_
-        clf2.fit(X_train, y_train)
-        predicted2 = clf2.predict(X_test)
-        print(clf2)
-        pred_prob2 = clf2.predict_proba(X_test)[:, 1]
-        auc = roc_auc_score(y_test, pred_prob2)
-        acc = accuracy_score(y_test, predicted2)
-        f1 = f1_score(y_test, predicted2)
-        prec = precision_score(y_test, predicted2)
-        rec = recall_score(y_test, predicted2)
-        print("Rand search classifier")
-        result = {'auc': auc, 'f1': f1, 'acc': acc, 'precision': prec, 'recall': rec}
-        print(result)
-        title = "learning curve for logreg"
-        plot_learning_curve(clf,title,X_train, y_train, ylim=(0, 1.01),cv=kfolds,n_jobs=-1,train_sizes=train_sizes)
-        plt.show()
-    if classifier != 'ensemble':
-        result = [predicted1,acc,pred_prob1,predicted2,pred_prob2]
     else:
-        result = [predicted1,acc,pred_prob1]
+        pred_prob = None
+   
+    acc = metrics.accuracy_score(y_test,predicted)
+    acc = acc*100
+    if classifier == None:
+        loss = log_loss(y_test,predicted)
+        result = [predicted,acc,pred_prob,loss]
+    else:
+    
+        result = [predicted,acc,pred_prob]
     return result    
 def initiate_predictions(train_test_data,method,multiclass):
     X_train = train_test_data[0]
@@ -976,23 +724,22 @@ def initiate_predictions(train_test_data,method,multiclass):
     y_train = train_test_data[2]
     y_test = train_test_data[3]
     prediction = train_predict_model(method,X_train,X_test,y_train,y_test,multiclass)
-    predicted1 = prediction[0]
+    predicted = prediction[0]
     acc = prediction[1]
     #true = y_train
     true = y_test
     
-    pred_prob1 = prediction[2]
-    predicted2 = prediction[3]
-    pred_prob2 = prediction[4]
-    result = [true,predicted1,acc,pred_prob1,predicted2,pred_prob2]
+    pred_prob = prediction[2]
+    
+    result = [true,predicted,acc,pred_prob]
     return result
-def plot_cm(cm1,cm2,method):
+def plot_cm(cm1,cm2,method,title):
     plt.figure(figsize=(20, 10))
     plt.subplot(121)
     
     plt.imshow(cm1, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
     classNames = ['Negative','Positive']
-    plt.title('Result'+ method[0])
+    plt.title('Result using '+title[0])
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     tick_marks = np.arange(len(classNames))
@@ -1008,7 +755,7 @@ def plot_cm(cm1,cm2,method):
     
     plt.imshow(cm2, interpolation='nearest', cmap=plt.cm.get_cmap('Wistia'))
     classNames = ['Negative','Positive']
-    plt.title('Result' + method[1])
+    plt.title('Result using '+title[1])
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     tick_marks = np.arange(len(classNames))
@@ -1064,7 +811,7 @@ def get_roc_curve(model, X, y):
     pred_proba = model.predict_proba(X)[:, 1]
     fpr, tpr, _ = roc_curve(y, pred_proba)
     return fpr, tpr
-def result_from_predicitions(prediction_array):
+def result_from_predicitions(prediction_array,title):
     
     print("Results from prediction:")
     print('-'*30)
@@ -1072,10 +819,13 @@ def result_from_predicitions(prediction_array):
     print(df1)
     print('Model Performance metrics:')
     print('-'*30)
-    print('Accuracy:', np.round(metrics.accuracy_score(prediction_array[0],prediction_array[1]),4))
-    print('Precision:', np.round(metrics.precision_score(prediction_array[0],prediction_array[1],average='micro'),4))
-    print('Recall:', np.round(metrics.recall_score(prediction_array[0],prediction_array[1],average='micro'),4))
-    print('F1 Score:', np.round(metrics.f1_score(prediction_array[0],prediction_array[1],average='micro'),4))
+    
+    df2 = pd.DataFrame({'Accuracy:': np.round(metrics.accuracy_score(prediction_array[0],prediction_array[1]),4),\
+    'Precision:': np.round(metrics.precision_score(prediction_array[0],prediction_array[1]),4),\
+    'Recall:': np.round(metrics.recall_score(prediction_array[0],prediction_array[1]),4),\
+    'F1 Score:': np.round(metrics.f1_score(prediction_array[0],prediction_array[1]),4)},index=["result"+title])
+    print(df2)
+    df2.to_csv("result"+title+".csv")
     print('\nModel Classification report:')
     print('-'*30)
     print(metrics.classification_report(prediction_array[0],prediction_array[1]))
@@ -1088,9 +838,9 @@ def result_from_predicitions2(prediction_array):
     print('Model Performance metrics:')
     print('-'*30)
     print('Accuracy:', np.round(metrics.accuracy_score(prediction_array[0],prediction_array[4]),4))
-    print('Precision:', np.round(metrics.precision_score(prediction_array[0],prediction_array[4],average='micro'),4))
-    print('Recall:', np.round(metrics.recall_score(prediction_array[0],prediction_array[4],average='micro'),4))
-    print('F1 Score:', np.round(metrics.f1_score(prediction_array[0],prediction_array[4],average='micro'),4))
+    print('Precision:', np.round(metrics.precision_score(prediction_array[0],prediction_array[4]),4))
+    print('Recall:', np.round(metrics.recall_score(prediction_array[0],prediction_array[4]),4))
+    print('F1 Score:', np.round(metrics.f1_score(prediction_array[0],prediction_array[4]),4))
     print('\nModel Classification report:')
     print('-'*30)
     print(metrics.classification_report(prediction_array[0],prediction_array[4]))
@@ -1164,7 +914,6 @@ def plot_roc(result1,result2,title,method):
         
         with open('tpr'+title[0]+method+'.pickle', 'wb') as handle:
             pickle.dump(tpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
     tprs.append(interp(mean_fpr, fpr, tpr))
     roc_auc = auc(fpr, tpr)
     aucs.append(roc_auc)
@@ -1182,7 +931,6 @@ def plot_roc(result1,result2,title,method):
     plt.legend(loc="lower right")
     plt.text(0.32,0.7,'More accurate area',fontsize = 12)
     plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
-
     ax2 = fig1.add_subplot(122,aspect = 'equal')
     ax2.add_patch(
         patches.Arrow(0.45,0.5,-0.25,0.25,width=0.3,color='green',alpha = 0.5)
@@ -1272,7 +1020,6 @@ def plot_roc2(result1,result2,title,method):
         
         with open('tpr'+title[0]+method+'.pickle', 'wb') as handle:
             pickle.dump(tpr, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
     tprs.append(interp(mean_fpr, fpr, tpr))
     roc_auc = auc(fpr, tpr)
     aucs.append(roc_auc)
@@ -1290,7 +1037,6 @@ def plot_roc2(result1,result2,title,method):
     plt.legend(loc="lower right")
     plt.text(0.32,0.7,'More accurate area',fontsize = 12)
     plt.text(0.63,0.4,'Less accurate area',fontsize = 12)
-
     ax2 = fig1.add_subplot(122,aspect = 'equal')
     ax2.add_patch(
         patches.Arrow(0.45,0.5,-0.25,0.25,width=0.3,color='green',alpha = 0.5)
@@ -1452,6 +1198,9 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     
     #Don't use stop words removal for deep learning
     #input_data = input_data.apply(remove_stopwords)
+
+
+    # Summarize number of words
     
     data = feature_engineering(input_data, output_data)
     '''
@@ -1505,7 +1254,16 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     assert data[0].shape[0] == data[2].shape[0]
     assert data[1].shape[0] == data[3].shape[0]
     data_in1 = tokenizer(input_data,data[0], data[1])
-    
+    X = np.concatenate((data_in1[0], data_in1[1]), axis=0)
+    y = np.concatenate((data_out[0], data_out[1]), axis=0)
+    print("Number of words: ")
+    print(len(np.unique(np.hstack(X))))
+    print("Review length: ")
+    result = [len(x) for x in X]
+    print("Mean %.2f words (%f)" % (np.mean(result), np.std(result)))
+    # plot review length
+    #plt.boxplot(result)
+    #plt.show()
     #print(data_in1[2])
     data_in2 = padding(data_in1[0], data_in1[1],input_data)
     global MAX_SEQUENCE_LENGTH
@@ -1574,7 +1332,7 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
         model = pickle.load(handle)
     '''
     #data_in2[0] = X_train
-    #data[2] = y_train
+    data2 = [data_in2[0],data_in2[1],data_out[0],data_out[1]]
     return [data_in2, data2, data,model]
 def vectorize_sequences(sequences, dimension=4900):
     results = np.zeros((len(sequences), dimension))
@@ -1590,11 +1348,21 @@ def multivectorization(concated):
     result = [X,word_index]
     return result
 def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
-    
     preds1 = model.predict(data1[1],batch_size=13)
     preds2 = model1.predict(data3[1],batch_size=13)
+    
+    #binary classification
+    preds1=[1 * (x[0]>=0.5) for x in preds1]
+    '''
+    #categorical
     preds1 = np.argmax(preds1, axis=-1)
+    '''
+    #binary classification
+    preds2=[1 * (x[0]>=0.5) for x in preds2]
+    '''
+    #categorical
     preds2 = np.argmax(preds2, axis=-1)
+    '''
     with open('preds1.pickle', 'wb') as handle:
         pickle.dump(preds1, handle, protocol=pickle.HIGHEST_PROTOCOL)
     with open('preds2.pickle', 'wb') as handle:
@@ -1608,11 +1376,11 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     test2 = ANN2
     title = [test1,test2]
     #keras evaluation
-    score = model.evaluate(data2[1], data2[3], verbose=0)
+    score = model.evaluate(data1[1], data2[3], verbose=1)
     print("Model Performance of model 1: "+ test1 +" (Test):")
     df_score1=pd.DataFrame.from_records([{'Accuracy':score[1],'Precision':score[2],'Recall':score[3],'F1_score':score[4]}])
     print(df_score1)
-    score = model1.evaluate(data4[1], data4[3], verbose=0)
+    score = model1.evaluate(data3[1], data4[3], verbose=1)
     print("Model Performance of model 2: "+ test2 +" (Test):")
     df_score2=pd.DataFrame.from_records([{'Accuracy':score[1],'Precision':score[2],'Recall':score[3],'F1_score':score[4]}])
     print(df_score2)
@@ -1634,6 +1402,18 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     print('-'*200)
     df2=pd.DataFrame({'Actual':test_data2, 'Predicted':preds2})
     print(df2)
+    df2 = pd.DataFrame({'Accuracy:': np.round(metrics.accuracy_score(test_data2,preds1),4),\
+    'Precision:': np.round(metrics.precision_score(test_data2,preds1),4),\
+    'Recall:': np.round(metrics.recall_score(test_data2,preds1),4),\
+    'F1 Score:': np.round(metrics.f1_score(test_data2,preds1),4)},index=["result"+title[0]])
+    print(df2)
+    df2.to_csv("result"+title[0]+".csv")
+    df2 = pd.DataFrame({'Accuracy:': np.round(metrics.accuracy_score(test_data2,preds2),4),\
+    'Precision:': np.round(metrics.precision_score(test_data2,preds2),4),\
+    'Recall:': np.round(metrics.recall_score(test_data2,preds2),4),\
+    'F1 Score:': np.round(metrics.f1_score(test_data2,preds2),4)},index=["result"+title[1]])
+    print(df2)
+    df2.to_csv("result"+title[1]+".csv")
     print('-'*200)
     print(metrics.classification_report(test_data1,preds1,labels,target_class))
     print('-'*200)
@@ -1641,6 +1421,7 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     array1 = [test_data1,preds1]
     array2 = [test_data2,preds2]
     method = test1+'_'+test2
+    method1 = [test1,test2]
     plot_classification_report(array1,array2,title,method)
     print('-'*200)
     print('\nPrediction Confusion Matrix:')
@@ -1649,8 +1430,11 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     print(cm1)
     cm2 = metrics.confusion_matrix(y_true=test_data2, y_pred=preds2)
     print(cm2)
-    plot_cm(cm1,cm2,method)
+    plot_cm(cm1,cm2,method,method1)
 
+    
+    
+    #works only in binary_crossentropy
     preds3 = model.predict(data1[1],batch_size=13).ravel()
     preds4 = model1.predict(data3[1],batch_size=13).ravel()
     fpr_keras1, tpr_keras1, _ = roc_curve(test_data1, preds3)
@@ -1666,6 +1450,7 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     plt.title('ROC curve')
     plt.legend(loc='best')
     plt.show()
+    
 
     df1.to_csv('prediction1.csv', encoding='utf-8', index=True)
     df2.to_csv('prediction2.csv', encoding='utf-8', index=True)
@@ -1789,26 +1574,17 @@ def plot_classification_report2(array1, array2,title,method, ax=None):
     plt.show()
     plt.close()
 #tokenizes the words
-def tokenizer2(train_data, test_data):
-    train = fastText.tokenize(train_data)
-    test = fastText.tokenize(test_data)
-    result = [train,test]
-    return result
 def tokenizer(input_data,train_data, test_data):
     #from [7]
     seq_lengths = input_data.apply(lambda x: len(x.split(' ')))
     print(seq_lengths.describe())
     
-    
-    max_sequence_len = max([len(x) for x in input_data])
-    print(max_sequence_len)
-    
     tk = Tokenizer(num_words=NB_WORDS,filters='!"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\t\n', lower=True, split=" ")
     tk.fit_on_texts(input_data)
-    trained_seq = tk.texts_to_sequences(train_data)
-    test_seq = tk.texts_to_sequences(test_data)
+    trained_seq = tk.texts_to_sequences(train_data.values)
+    test_seq = tk.texts_to_sequences(test_data.values)
     word_index = tk.word_index
-    result = [trained_seq, np.array(test_seq), word_index]
+    result = [trained_seq, test_seq, word_index]
     return result
 def one_hot_seq(seqs, nb_features = NB_WORDS):
     ohs = np.zeros((len(seqs), nb_features))
@@ -1830,11 +1606,13 @@ def date_time(x):
         return 'Date now: %s' % datetime.datetime.now()
     if x==4:  
         return 'Date today: %s' % datetime.date.today() 
-def plot_performance(history=None, figure_directory=None, ylim_pad=[0, 0]):
+def plot_performance(title,history=None, figure_directory=None, ylim_pad=[0, 0]):
     xlabel = 'Epoch'
     legends = ['Training', 'Validation']
-
+    if title is None:
+        title = 'GRU2'
     plt.figure(figsize=(20, 10))
+    plt.suptitle(title,fontsize=17)
     y1 = history.history['f1_score1']
     y2 = history.history['val_f1_score1']
 
@@ -1915,10 +1693,7 @@ def plot_performance(history=None, figure_directory=None, ylim_pad=[0, 0]):
     plt.show()
 #in [7] padding is used to fill out null values
 def padding(trained_seq, test_seq,input):
-    
-    
     trained_seq_trunc = pad_sequences(trained_seq,maxlen=MAX_LEN)
-    
     test_seq_trunc = pad_sequences(test_seq,maxlen=MAX_LEN)
     print(trained_seq_trunc.shape)
     print(test_seq_trunc.shape)
@@ -1968,8 +1743,18 @@ def we_output_data_transform(y_train,y_test,encoding='binary',category=None):
         #le = LabelEncoder()
         #y_train_le = le.fit_transform(y_train.values)
         #y_test_le = le.fit_transform(y_test.values)
+        
+        #binary_crossentropy
         y_train = np.array(y_train.values)
         y_test = np.array(y_test.values)
+        '''
+        
+        #categorical_crossentropy
+        
+        y_train = np.array(to_categorical(y_train.values).astype('float32'))
+        y_test = np.array(to_categorical(y_test.values).astype('float32'))
+        '''
+        
     result = [y_train,y_test]
     return result
 #embeddings layer
@@ -2092,6 +1877,8 @@ def add_lower(embedding, vocab):
 #[8]
 def pretrained_embedding_layer(word_to_vec_map, word_to_index,embeddings_index):
     vocab_len = len(word_to_index) + 1
+    with open('words.pickle', 'wb') as handle:
+        pickle.dump(vocab_len, handle, protocol=pickle.HIGHEST_PROTOCOL)
     #emb_dim = word_to_vec_map["cucumber"].shape[0]
     emb_dim = 300
     '''
@@ -2104,67 +1891,67 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index,embeddings_index):
         emb_matrix[index, :] = word_to_vec_map[word]
         
     embedding_layer = Embedding(vocab_len, emb_dim,embeddings_initializer=Constant(emb_matrix),
-    input_length = MAX_SEQUENCE_LENGTH,trainable=False) 
+    input_length = MAX_LEN,trainable=False) 
 
     
     return embedding_layer
 #bilstm
 def bilstm(embedding_layer1,dense):
     model = Sequential()
+    embedding_layer1=Embedding(117, 300, input_length=72)
     model.add(embedding_layer1)
-    model.add(Bidirectional(LSTM(300)))
-    model.add(Dense(600,activation='elu'))
-    #model.add(Dense(3,activation='elu'))
-    model.add(Dense(dense))
+    model.add(Bidirectional(LSTM(units=117)))
+    
+    model.add(Dense(dense,activation='sigmoid'))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
-    adam = Adam(lr=0.009,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy',precision,recall,f1_score])
+    adam = Adam(lr=0.001,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score1])
     print(model.summary())
     return model
 def cnn2(embedding_layer1,dense):
     
     model = Sequential()
+    embedding_layer1=Embedding(117, 300, input_length=72)
     model.add(embedding_layer1)
-    model.add(Conv1D(filters, kernel_size, padding='valid', activation='elu', strides=1))
+    model.add(Conv1D(filters, kernel_size, padding='valid', strides=1))
     model.add(MaxPooling1D(pool_size=pool_size))
-    model.add(LSTM(300,return_sequences=True))
-    model.add(GRU(300))
-    model.add(Dense(512,activation='elu'))
-    #model.add(Dense(3,activation='elu'))
-    model.add(Dense(dense))
+    model.add(LSTM(units=117))
+    model.add(Dense(dense,activation='sigmoid'))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
-    adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy',precision,recall,f1_score])
+    adam = Adam(lr=0.001,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score1])
     print(model.summary())
     return model
 def cnn1(embedding_layer1,dense):
     
     model = Sequential()
+    embedding_layer1=Embedding(117, 300, input_length=72)
     model.add(embedding_layer1)
-    model.add(Conv1D(filters, kernel_size, padding='valid', activation='relu', strides=1))
+    model.add(Conv1D(filters, kernel_size, padding='valid', strides=1))
     model.add(MaxPooling1D(pool_size=pool_size))
-    model.add(LSTM(300))
-    model.add(Dense(512,activation='elu'))
-    #model.add(Dense(3,activation='elu'))
-    model.add(Dense(dense))
+    model.add(Bidirectional(LSTM(units=117)))
+    model.add(Dense(dense,activation='sigmoid'))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
-    adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy',precision,recall,f1_score])
+    adam = Adam(lr=0.001,epsilon=0.09,amsgrad=True,decay=0)
+    model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score1])
     print(model.summary())
     return model
 def gru_model(embedding_layer1,dense):
     
     
     model = Sequential()
+    '''
+    with open('words.pickle', 'rb') as handle:
+        word = pickle.load(handle)
+    embedding_layer1 = Embedding(word, 100, input_length=MAX_SEQUENCE_LENGTH)
+    '''
+    embedding_layer1=Embedding(117, 300, input_length=72)
     model.add(embedding_layer1)
-    model.add(GRU(117))
-    #model.add(ELU(alpha=1.0))
-    #model.add(Dense(234))
+    model.add(GRU(units=117))
     #model.add(Dense(3))
-    model.add(LeakyReLU(alpha=0.01))
-    model.add(Dense(dense))
+    model.add(Dense(dense,activation='sigmoid'))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
-    #adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
+    adam = Adam(lr=0.008)
     model.compile(loss='binary_crossentropy', optimizer='adam', metrics = ['accuracy',precision,recall,f1_score1])
     print(model.summary())
     
@@ -2172,15 +1959,18 @@ def gru_model(embedding_layer1,dense):
 def lstm_model(embedding_layer1,dense):
     
     model = Sequential()
+    '''
+    with open('words.pickle', 'rb') as handle:
+        word = pickle.load(handle)
+    embedding_layer1 = Embedding(word, 300, input_length=MAX_SEQUENCE_LENGTH)
+    '''
+    embedding_layer1=Embedding(117, 300, input_length=72)
     model.add(embedding_layer1)
-    model.add(LSTM(117))
-    #model.add(ELU(alpha=1.0))
+    model.add(LSTM(units=117))
     #model.add(Dense(234,activation='elu',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
-    #model.add(Dense(3,activation='elu'))
-    model.add(LeakyReLU(alpha=0.01))
-    model.add(Dense(dense))
+    model.add(Dense(dense,activation='sigmoid'))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
-    #adam = Adam(lr=0.008,epsilon=0.09,amsgrad=True,decay=0)
+    adam = Adam(lr=0.008)
     model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score1])
     print(model.summary())
     
@@ -2189,17 +1979,13 @@ def lstm_model(embedding_layer1,dense):
 def gru_model2(embedding_layer1,dense):
 
     model = Sequential()
+    embedding_layer1=Embedding(117, 300, input_length=72)
     model.add(embedding_layer1)
-    model.add(GRU(lstm_out,kernel_initializer='random_uniform',dropout=0.00001,recurrent_dropout=0.00001,activation='elu',use_bias=True,return_sequences=True))
-    model.add(GRU(MAX_LEN,activation='relu'))
-    
-    model.add(Dense(lstm_out,activation='elu'))
-    
-    #model.add(Dense(3,activation='elu'))
-    model.add(Dense(dense, use_bias=False,activation='softmax',kernel_regularizer=regularizers.l2(1e-16),activity_regularizer=regularizers.l1(1e-16),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
+    model.add(Bidirectional(GRU(units=117)))
+    model.add(Dense(dense,activation='sigmoid'))    
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     adam = Adam(lr=0.009,epsilon=0.09,amsgrad=True,decay=0)
-    model.compile(loss = 'categorical_crossentropy', optimizer=adam,metrics = ['accuracy',precision,recall,f1_score])
+    model.compile(loss = 'binary_crossentropy', optimizer='adam',metrics = ['accuracy',precision,recall,f1_score1])
     print(model.summary())
     return model
 def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y_val,dense):
@@ -2235,8 +2021,8 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
         model = cnn1(embedding_layer,dense)
-        track = model.fit(X_train, y_train, batch_size=13, epochs=20, verbose=1,validation_data=(X_val, y_val),callback=callbacks)
-        plot_performance(track)
+        track = model.fit(X_train, y_train, batch_size=13, epochs=20, verbose=1,validation_data=(X_val, y_val))
+        plot_performance(model_type,track)
     elif model_type == 'cnn2':
         '''
         a=0
@@ -2263,8 +2049,8 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
         model = cnn2(embedding_layer,dense)
-        track = model.fit(X_train, y_train, batch_size=13, epochs=20, verbose=1,validation_data=(X_val, y_val),callback=callbacks)
-        plot_performance(track)
+        track = model.fit(X_train, y_train, batch_size=13, epochs=20, verbose=1,validation_data=(X_val, y_val))
+        plot_performance(model_type,track)
     elif model_type == 'lstm':
         '''
         a=0
@@ -2288,8 +2074,8 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         track = model.fit(X_train, y_train, validation_steps=2, steps_per_epoch=2, batch_size=13, epochs=10, verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
         model = lstm_model(embedding_layer,dense)
-        track = model.fit(X_train, y_train, epochs=10,validation_steps=2, steps_per_epoch=1,batch_size=None,verbose=1,shuffle=False,validation_data=(X_val, y_val),callbacks=callbacks)
-        plot_performance(track)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,validation_data=(X_val, y_val))
+        plot_performance(model_type,track)
     elif model_type == 'bilstm':
         '''
         a=0
@@ -2312,8 +2098,8 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         track = model.fit(X_train, y_train, validation_steps=2, steps_per_epoch=2, batch_size=none, epochs=10, verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
         model = bilstm(embedding_layer,dense)
-        track = model.fit(X_train, y_train, epochs=20, validation_steps=2, steps_per_epoch=2,batch_size=None,verbose=1,shuffle=False,validation_data=(X_val, y_val),callback=callbacks)
-        plot_performance(track)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,validation_data=(X_val, y_val))
+        plot_performance(model_type,track)
     elif model_type == 'gru':
         '''
         a=0
@@ -2340,8 +2126,8 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
         model = gru_model(embedding_layer,dense)
-        track = model.fit(X_train, y_train, epochs=20, batch_size=1000,verbose=1,shuffle=False,validation_data=(X_val, y_val),callbacks=callbacks)
-        plot_performance(track)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,validation_data=(X_val, y_val))
+        plot_performance(model_type,track)
     else:
         '''
         a=0
@@ -2368,8 +2154,8 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
         model = gru_model2(embedding_layer,dense)
-        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,shuffle=False,validation_data=(X_val, y_val),callback=callbacks)
-        plot_performance(track)
+        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,validation_data=(X_val, y_val))
+        plot_performance(model_type,track)
     #print("%.2f%% (+/- %.2f%%)" % (numpy.mean(cvscores), numpy.std(cvscores)))
     #model = None
     return model

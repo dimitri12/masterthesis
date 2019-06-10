@@ -7,4 +7,4 @@ and analyze how these methods can predict future outcomes based on the given dat
 
 To run predictions based only on classification methods, open in the Jupyter Notebook the "exjobb_final2.ipynb" file and run all cells (except for the "tree" which is decision trees and it is not included in the report, you can remove it)
 
-To run predictions based only on classification methods, open in the Jupyter Notebook the "exjobb_final3.ipynb" file and run all cells
+To run predictions based only on deep learning methods, open in the Jupyter Notebook the "exjobb_final3.ipynb" file and run all cells, commit then after the run the notebook file and we can call it a day :D

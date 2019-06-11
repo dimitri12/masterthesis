@@ -51,10 +51,9 @@ result_frame = pd.DataFrame(columns=["Method","Accuracy"])
 #Douglas test file
 df = pd.read_csv("190203_data_exjobb.csv", encoding='ISO-8859-1')
 
-labels = run.create_labels_list(df)
+#labels = run.create_labels_list(df)
 #The labels list contains all the data from columns that has hexadecimal values
 #The solution is to perform individual predictions but generate precision as metric
-
 '''
 42 indexes
 labels by index:
@@ -83,26 +82,20 @@ single 1
 '''
 Categorise index 2 and 5
 '''
-'''
 df = run.transformAge(df)
 df = run.transformLCD(df)
-array = run.doMultiClass(df)
-print(array[0])
-print(array[1])
-print(array[2])
-print(array[3])
-print(array[4])
-print(df)
+
+#array = run.doMultiClass(df)
+#print(df)
 #it works
-'''
 '''
 Perform an Explorative data analysis
 '''
 
-#run.eda(df)
+input_data = df.freetext.astype(str)
+with open('input.pickle', 'wb') as handle:
+        pickle.dump(input_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-#load output data and define if it is multiclass or not
-#input_data = df.FreeText
 #pout,prio,operator,agecat,lcdcat
 
 '''
@@ -116,58 +109,34 @@ Part 1: Text Classification with BoW and TF-IDF
 
 '''
 
-multiclass = 'yes'
-acc = []
-loss = []
-#df.freetext.astype(str)
-
-#input_data= run.pre_processing1(df.iloc[:,1].astype(str),df)
-#minnesanteckning:lägg till pickle
-'''
-#save
-with open('tokenizer.pickle', 'wb') as handle:
-    pickle.dump(input_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
-'''
-#load
-with open('tokenizer.pickle', 'rb') as handle:
-    input_data1 = pickle.load(handle)
-
-
-output_data = df.hosp_admit
-'''
-bag_of_words2 = run.text_processing(input_data1,output_data, None, 1)
-#save
-with open('bow.pickle', 'wb') as handle:
-    pickle.dump(bag_of_words2, handle, protocol=pickle.HIGHEST_PROTOCOL)
-tf_idf2 = run.text_processing(input_data1,output_data, "tfidf", 1)
-with open('tfidf.pickle', 'wb') as handle:
-    pickle.dump(tf_idf2, handle, protocol=pickle.HIGHEST_PROTOCOL)
-'''
-with open('bow.pickle', 'rb') as handle:
-    bag_of_words2 = pickle.load(handle)
-with open('tfidf.pickle', 'rb') as handle:
-    tf_idf2 = pickle.load(handle)
-
-data_array = [bag_of_words2,tf_idf2]
-
-result = run.clf_predictor(data_array,multiclass)
-acc.append(result[0])
-loss.append(result[1])
-result1 = [acc,loss]
-print(result1)
-'''
-run.plot_metrics(run.create_plot_data(result,None))
-run.plot_roc(result[1][0],result[1][1])
-'''
-'''
 print("##################################")
 print("Preprocessing:")
 print("----------------------------------")
-preproc1 = run.pre_processing1(df.FreeText,df)
-preproc2 = np.vectorize(run.pre_processing2)
-preproc2 = preproc2(df.FreeText)
+
+
+
+'''
+#save
+with open('preproc1.pickle', 'wb') as handle:
+    pickle.dump(preproc1, handle, protocol=pickle.HIGHEST_PROTOCOL)
+with open('preproc2.pickle', 'wb') as handle:
+    pickle.dump(preproc2, handle, protocol=pickle.HIGHEST_PROTOCOL)
+with open('preproc3.pickle', 'wb') as handle:
+    pickle.dump(preproc3, handle, protocol=pickle.HIGHEST_PROTOCOL)
+with open('preproc4.pickle', 'wb') as handle:
+    pickle.dump(preproc4, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+#load
+with open('preproc1.pickle', 'rb') as handle:
+    input_data = pickle.load(handle)
+with open('output_data.pickle', 'wb') as handle:
+    pickle.dump(output_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+'''
+
+
 print("Preprocessing finished")
 print("##################################")
+'''
 print("Transforming output data:")
 print("----------------------------------")
 outputdata = run.transform_output_data(output_data)
@@ -177,30 +146,57 @@ input_data = preproc2
 #print(outputdata2)
 print("Inverse Transforming:")
 inv_output = run.inverse_transform_output_data(outputdata.NewPout)
+'''
 print("Embedding/Encoding/Processing starting")
 print("----------------------------------")
 #the result from these encodings are arrays containing training and test data for both the input and output
 #in order: input_train, input_test, output_train, output_test
-bag_of_words2 = run.text_processing(input_data,outputdata2, None, 1)
-tf_idf2 = run.text_processing(input_data,outputdata2, "tfidf", 1)
-data_array = [bag_of_words2,tf_idf2]
-print(tf_idf2)
+
+'''
+with open('bow.pickle', 'wb') as handle:
+    pickle.dump(bow, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+with open('bow.tfidf', 'wb') as handle:
+    pickle.dump(tfidf, handle, protocol=pickle.HIGHEST_PROTOCOL)
+with open('bow.pickle', 'rb') as handle:
+    bow = pickle.load(handle)
+with open('bow.tfidf', 'rb') as handle:
+    tfidf = pickle.load(handle)
+'''
+def classification():
+    with open('input.pickle', 'rb') as handle:
+        input_data = pickle.load(handle)
+    with open('df.pickle', 'rb') as handle:
+        df = pickle.load(handle)
+    preproc1 = run.pre_processing1(input_data,df)
+    output_data = df.hosp_ed
+    bow = run.text_processing(preproc1,output_data, None, 1)
+    tfidf = run.text_processing(preproc1,output_data, "tfidf", 1)
+    method = 'NBG'
+    data_array = [bow,tfidf]
+    multiclass = 'no'
+    result = run.predictor(data_array,method,multiclass)
+    run.generate_metrics(result,method)
+    #method = 'Logistic_regression'
+    #index 0=BOW
+    #index1=TF*IDF
+    #index[0][0] true data for BoW
+    #index[0][1] predicted data for BoW
+    #index[0][2] accuracy for BoW
+    #if log reg is used: #index[0][3] is loss for BoW
+    #else #index[0][3] is pred_proba for BoW
+    title=[method+'BoW',method+'TFIDF']
+    run.plot_roc(result[0],result[1],title,method)
+
+#run.plot_roc(result[1][0],result[1][3])
+#run.plot_metrics(run.create_plot_data(result,'NBG'))
 
 print("Embedding/Encoding/Processing is finished")
-'''
+
 print("##################################")
 print("Modeling and prediction:")
 print("----------------------------------")
 
-#result = run.doMultiClasspart2(input_data,df)
-#run.plot_metrics(create_plot_data(result,None))
-#run.plot_roc(result[1][0],result[1][1])
-#result1 = run.doBinary2(input_data,df,labels)
-#run.plot_metrics(create_plot_data(result1,None))
-#run.plot_roc(result1[1][0],result1[1][1])
-#result2 = run.doBinary1part2(input_data,df)
-#run.plot_metrics(create_plot_data(result2,None))
-#run.plot_roc(result2[1][0],result1[2][1])
 
 print("Modeling and prediction finished")
 print("##################################")
@@ -220,7 +216,7 @@ ANNs:
 1.CNN1
 2.CNN2
 3.LSTM
-4.GRU
+4.GRU1
 5.GRU2
 6. Default
 
@@ -233,6 +229,51 @@ embedding layers:
 #outputdata = run.transform_output_data(output_data,'int')
 
 #print(outputdata)
-test = run.word_embeddings(input_data1, output_data,'cnn1',2,0)
+
+'''
+
+#run.eda2(df)
+'''
+def test_we():
+    ANN1 = 'lstm'
+    ANN2 = 'gru'
+    ANN3 = 'bilstm'
+    ANN4 = 'bigru'
+    ANN5 = 'cnn1'
+    ANN6= 'cnn2'
+    input_data = df.freetext.astype(str)
+    output_data = df.hosp_ed
+    test = run.word_embeddings(input_data, output_data,ANN1,2,1)
+    test1 = run.word_embeddings(input_data, output_data,ANN2,2,1)
+    run.we_evaluation(test[3],test1[3],test[0],test[1],test1[0],test1[1],ANN1,ANN2,test[2],test1[2])
+    '''
+    test = run.word_embeddings(input_data, output_data,ANN3,2,1)
+    test1 = run.word_embeddings(input_data, output_data,ANN4,2,1)
+    run.we_evaluation(test[3],test1[3],test[0],test[1],test1[0],test1[1],ANN3,ANN4,test[2],test1[2])
+    test = run.word_embeddings(input_data, output_data,ANN5,2,1)
+    test1 = run.word_embeddings(input_data, output_data,ANN6,2,1)
+    run.we_evaluation(test[3],test1[3],test[0],test[1],test1[0],test1[1],ANN5,ANN6,test[2],test1[2])
+    '''
+def test_imdb():
+    import numpy as np
+    seed = 7
+    np.random.seed(seed)
+    from keras.datasets import imdb
+    from keras.layers.embeddings import Embedding
+    from keras.preprocessing import sequence
+    (X_train, y_train), (X_test, y_test) = imdb.load_data(nb_words=500)
+    max_words = 500
+    X_train = sequence.pad_sequences(X_train, maxlen=max_words)
+    X_test = sequence.pad_sequences(X_test, maxlen=max_words)
+    EL = Embedding(5000, 100, input_length=max_words)
+    ANN1 = 'lstm'
+    ANN2 = 'gru'
+    dense = 1
+    run.predict_model(50,EL,ANN1,X_train,y_train,X_test, y_test,dense)
+    run.predict_model(50,EL,ANN2,X_train,y_train,X_test, y_test,dense)
+    #we_evaluation(test[3],test1[3],test[0],test[1],test1[0],test1[1],ANN1,ANN2,test[2],test1[2])
+
+test_we()
+
 print("##################################")
 print("Done")

@@ -256,12 +256,14 @@ def test_we():
     test = run.word_embeddings(input_data, output_data,ANN1,2,1)
     test1 = run.word_embeddings(input_data, output_data,ANN2,2,1)
     run.we_evaluation(test[3],test1[3],test[0],test[1],test1[0],test1[1],ANN1,ANN2,test[2],test1[2])
+    '''
     test = run.word_embeddings(input_data, output_data,ANN3,2,1)
     test1 = run.word_embeddings(input_data, output_data,ANN4,2,1)
     run.we_evaluation(test[3],test1[3],test[0],test[1],test1[0],test1[1],ANN3,ANN4,test[2],test1[2])
     test = run.word_embeddings(input_data, output_data,ANN5,2,1)
     test1 = run.word_embeddings(input_data, output_data,ANN6,2,1)
     run.we_evaluation(test[3],test1[3],test[0],test[1],test1[0],test1[1],ANN5,ANN6,test[2],test1[2])
+    '''
 def test_imdb():
     import numpy as np
     seed = 7

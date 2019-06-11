@@ -106,6 +106,7 @@ warnings.filterwarnings(action='ignore', category=DataConversionWarning)
 warnings.filterwarnings(action='ignore', category=FutureWarning)
 warnings.filterwarnings(action='ignore')
 
+
 num_partitions = multiprocessing.cpu_count()
 num_cores = multiprocessing.cpu_count()
 #Global Variables from [7] and others
@@ -114,11 +115,11 @@ NB_WORDS = 4037069  # Parameter indicating the number of words we'll put in the 
 VAL_SIZE = 9  # Size of the validation set (originally 1000)
 NB_START_EPOCHS = 8  # Number of epochs we usually start to train with
 BATCH_SIZE = 512  # Size of the batches used in the mini-batch gradient descent
-#MAX_LEN = 117  # Maximum number of words in a sequence
-MAX_LEN = 72
+MAX_LEN = 134  # Maximum number of words in a sequence
+#MAX_LEN = 62
 GLOVE_DIM = 50  # Number of dimensions of the GloVe word embeddings
-MAX_SEQUENCE_LENGTH = 463
-MAX_NB_WORDS = 9501
+MAX_SEQUENCE_LENGTH = 860
+MAX_NB_WORDS = 4037069
 EMBEDDING_DIM = 100
 VALIDATION_SPLIT = 0.1
 #activation function
@@ -138,8 +139,6 @@ kernel_size = 5
 filters = 64
 pool_size = 4
 lstm_output_size = 70
-seed = 7
-np.random.seed(seed)
 #model2 = fastText.train_supervised('./fasttext_train.txt',label='label_', epoch=20, dim=200)
 
 def cleaning(s):
@@ -170,14 +169,14 @@ def build_corpus(data):
             word_list = sentence[1].split(" ")
             corpus.append(word_list)
     
-    with open('corpus.pickle', 'wb') as handle:
+    with open('data/corpus.pickle', 'wb') as handle:
         pickle.dump(corpus, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return corpus
 def tsne_plot(df):
     corpus = build_corpus(df)
     
     model = word2vec.Word2Vec(corpus, size=100, window=20, min_count=1, workers=4)
-    with open('w2vmodel.pickle', 'wb') as handle:
+    with open('data/w2vmodel.pickle', 'wb') as handle:
         pickle.dump(model, handle, protocol=pickle.HIGHEST_PROTOCOL)
     #model.most_similar('')
     "Creates and TSNE model and plots it"
@@ -874,9 +873,9 @@ def plot_learning_curve(estimator, title, X, y, ylim, cv, n_jobs, train_sizes):
 def run_kfold(clf):
     kf = KFold(n_splits=10,shuffle=True)
     outcomes = []
-    with open('output_data.pickle', 'rb') as handle:
+    with open('data/output_data.pickle', 'rb') as handle:
         output_data = pickle.load(handle)
-    with open('preproc1.pickle', 'rb') as handle:
+    with open('data/preproc1.pickle', 'rb') as handle:
         input_data = pickle.load(handle)
     fold = 0
     for train_index, test_index in kf.split(input_data):
@@ -1282,9 +1281,9 @@ def word_embeddings(input_data, output_data,ANN,dense,el,category=None):
     #tip: try to swap the sv.vec file with cc.sv.300.vec
     #load fasttext data into cnn1
     #save
-    with open('data_in2.pickle', 'wb') as handle:
+    with open('data/data_in2.pickle', 'wb') as handle:
         pickle.dump(data_in2, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    with open('data_out.pickle', 'wb') as handle:
+    with open('data/data_out.pickle', 'wb') as handle:
         pickle.dump(data_out, handle, protocol=pickle.HIGHEST_PROTOCOL)
     '''
     with open('data_in.pickle', 'rb') as handle:
@@ -1363,13 +1362,13 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     #categorical
     preds2 = np.argmax(preds2, axis=-1)
     '''
-    with open('preds1.pickle', 'wb') as handle:
+    with open('data/preds1.pickle', 'wb') as handle:
         pickle.dump(preds1, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    with open('preds2.pickle', 'wb') as handle:
+    with open('data/preds2.pickle', 'wb') as handle:
         pickle.dump(preds2, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    with open('test_data1.pickle', 'wb') as handle:
+    with open('data/test_data1.pickle', 'wb') as handle:
         pickle.dump(datax[3], handle, protocol=pickle.HIGHEST_PROTOCOL)
-    with open('test_data2.pickle', 'wb') as handle:
+    with open('data/test_data2.pickle', 'wb') as handle:
         pickle.dump(datay[3], handle, protocol=pickle.HIGHEST_PROTOCOL)
 
     test1 = ANN1
@@ -1384,13 +1383,13 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
     print("Model Performance of model 2: "+ test2 +" (Test):")
     df_score2=pd.DataFrame.from_records([{'Accuracy':score[1],'Precision':score[2],'Recall':score[3],'F1_score':score[4]}])
     print(df_score2)
-    with open('preds1.pickle', 'rb') as handle:
+    with open('data/preds1.pickle', 'rb') as handle:
         preds1 = pickle.load(handle)
-    with open('preds2.pickle', 'rb') as handle:
+    with open('data/preds2.pickle', 'rb') as handle:
         preds2 = pickle.load(handle)
-    with open('test_data1.pickle', 'rb') as handle:
+    with open('data/test_data1.pickle', 'rb') as handle:
         test_data1 = pickle.load(handle)
-    with open('test_data2.pickle', 'rb') as handle:
+    with open('data/test_data2.pickle', 'rb') as handle:
         test_data2 = pickle.load(handle)
     #SKLearn Evaluation
     target_class = ['class_0','class_1']
@@ -1454,6 +1453,16 @@ def we_evaluation(model,model1,data1,data2,data3,data4,ANN1,ANN2 ,datax,datay):
 
     df1.to_csv('prediction1.csv', encoding='utf-8', index=True)
     df2.to_csv('prediction2.csv', encoding='utf-8', index=True)
+    del model
+    del model1
+    del test_data1
+    del test_data2
+    del data1
+    del data2
+    del data3
+    del data4
+    del datax
+    del datay
 def sentences_to_indices(X, word_to_index, maxLen):
     m = X.shape[0] 
     X = np.array(X)
@@ -1714,7 +1723,7 @@ def we_output_data_transform(y_train,y_test,encoding='binary',category=None):
         '''
         From Peter Nagy, Kaggle, https://www.kaggle.com/ngyptr/multi-class-classification-with-lstm
         '''
-        with open('df.pickle', 'rb') as handle:
+        with open('data/df.pickle', 'rb') as handle:
             df = pickle.load(handle)
         df1 = df['freetext']
         df2 = df['pout']
@@ -1877,7 +1886,7 @@ def add_lower(embedding, vocab):
 #[8]
 def pretrained_embedding_layer(word_to_vec_map, word_to_index,embeddings_index):
     vocab_len = len(word_to_index) + 1
-    with open('words.pickle', 'wb') as handle:
+    with open('data/words.pickle', 'wb') as handle:
         pickle.dump(vocab_len, handle, protocol=pickle.HIGHEST_PROTOCOL)
     #emb_dim = word_to_vec_map["cucumber"].shape[0]
     emb_dim = 300
@@ -1898,9 +1907,10 @@ def pretrained_embedding_layer(word_to_vec_map, word_to_index,embeddings_index):
 #bilstm
 def bilstm(embedding_layer1,dense):
     model = Sequential()
-    embedding_layer1=Embedding(117, 300, input_length=72)
+    #try and comment this out and test again
+    embedding_layer1=Embedding(5000, 100, input_length=MAX_LEN)
     model.add(embedding_layer1)
-    model.add(Bidirectional(LSTM(units=117)))
+    model.add(Bidirectional(LSTM(units=100)))
     
     model.add(Dense(dense,activation='sigmoid'))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
@@ -1911,11 +1921,12 @@ def bilstm(embedding_layer1,dense):
 def cnn2(embedding_layer1,dense):
     
     model = Sequential()
-    embedding_layer1=Embedding(117, 300, input_length=72)
+    #try and comment this out and test again
+    embedding_layer1=Embedding(5000, 100, input_length=MAX_LEN)
     model.add(embedding_layer1)
     model.add(Conv1D(filters, kernel_size, padding='valid', strides=1))
     model.add(MaxPooling1D(pool_size=pool_size))
-    model.add(LSTM(units=117))
+    model.add(LSTM(units=100))
     model.add(Dense(dense,activation='sigmoid'))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     adam = Adam(lr=0.001,epsilon=0.09,amsgrad=True,decay=0)
@@ -1925,11 +1936,12 @@ def cnn2(embedding_layer1,dense):
 def cnn1(embedding_layer1,dense):
     
     model = Sequential()
-    embedding_layer1=Embedding(117, 300, input_length=72)
+    #try and comment this out and test again
+    embedding_layer1=Embedding(5000, 100, input_length=MAX_LEN)
     model.add(embedding_layer1)
     model.add(Conv1D(filters, kernel_size, padding='valid', strides=1))
     model.add(MaxPooling1D(pool_size=pool_size))
-    model.add(Bidirectional(LSTM(units=117)))
+    model.add(Bidirectional(LSTM(units=100)))
     model.add(Dense(dense,activation='sigmoid'))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     adam = Adam(lr=0.001,epsilon=0.09,amsgrad=True,decay=0)
@@ -1940,12 +1952,8 @@ def gru_model(embedding_layer1,dense):
     
     
     model = Sequential()
-    '''
-    with open('words.pickle', 'rb') as handle:
-        word = pickle.load(handle)
-    embedding_layer1 = Embedding(word, 100, input_length=MAX_SEQUENCE_LENGTH)
-    '''
-    embedding_layer1=Embedding(117, 300, input_length=72)
+    #try and comment this out and test again
+    embedding_layer1=Embedding(5000, 100, input_length=MAX_LEN)
     model.add(embedding_layer1)
     model.add(GRU(units=117))
     #model.add(Dense(3))
@@ -1959,14 +1967,10 @@ def gru_model(embedding_layer1,dense):
 def lstm_model(embedding_layer1,dense):
     
     model = Sequential()
-    '''
-    with open('words.pickle', 'rb') as handle:
-        word = pickle.load(handle)
-    embedding_layer1 = Embedding(word, 300, input_length=MAX_SEQUENCE_LENGTH)
-    '''
-    embedding_layer1=Embedding(117, 300, input_length=72)
+    #try and comment this out and test again
+    embedding_layer1=Embedding(5000, 100, input_length=MAX_LEN)
     model.add(embedding_layer1)
-    model.add(LSTM(units=117))
+    model.add(LSTM(units=100))
     #model.add(Dense(234,activation='elu',kernel_regularizer=regularizers.l2(1e-9),activity_regularizer=regularizers.l1(1e-9),bias_regularizer=regularizers.l2(0.01), kernel_constraint=maxnorm(3)))
     model.add(Dense(dense,activation='sigmoid'))
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
@@ -1979,9 +1983,10 @@ def lstm_model(embedding_layer1,dense):
 def gru_model2(embedding_layer1,dense):
 
     model = Sequential()
-    embedding_layer1=Embedding(117, 300, input_length=72)
+    #try and comment this out and test again
+    #embedding_layer1=Embedding(5000, 100, input_length=MAX_LEN)
     model.add(embedding_layer1)
-    model.add(Bidirectional(GRU(units=117)))
+    model.add(Bidirectional(GRU(units=100)))
     model.add(Dense(dense,activation='sigmoid'))    
     #sgd = SGD(lr=0.004, decay=1e-7, momentum=0.3, nesterov=True)
     adam = Adam(lr=0.009,epsilon=0.09,amsgrad=True,decay=0)
@@ -2021,7 +2026,7 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
         model = cnn1(embedding_layer,dense)
-        track = model.fit(X_train, y_train, batch_size=13, epochs=20, verbose=1,validation_data=(X_val, y_val))
+        track = model.fit(X_train, y_train, epochs=3, batch_size=128, verbose=1,validation_data=(X_val, y_val))
         plot_performance(model_type,track)
     elif model_type == 'cnn2':
         '''
@@ -2049,7 +2054,7 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
         model = cnn2(embedding_layer,dense)
-        track = model.fit(X_train, y_train, batch_size=13, epochs=20, verbose=1,validation_data=(X_val, y_val))
+        track = model.fit(X_train, y_train, epochs=3, batch_size=128, verbose=1,validation_data=(X_val, y_val))
         plot_performance(model_type,track)
     elif model_type == 'lstm':
         '''
@@ -2074,7 +2079,7 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         track = model.fit(X_train, y_train, validation_steps=2, steps_per_epoch=2, batch_size=13, epochs=10, verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
         model = lstm_model(embedding_layer,dense)
-        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,validation_data=(X_val, y_val))
+        track = model.fit(X_train, y_train, epochs=3, batch_size=128,verbose=1,validation_data=(X_val, y_val))
         plot_performance(model_type,track)
     elif model_type == 'bilstm':
         '''
@@ -2098,7 +2103,7 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         track = model.fit(X_train, y_train, validation_steps=2, steps_per_epoch=2, batch_size=none, epochs=10, verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
         model = bilstm(embedding_layer,dense)
-        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,validation_data=(X_val, y_val))
+        track = model.fit(X_train, y_train, epochs=3, batch_size=128,verbose=1,validation_data=(X_val, y_val))
         plot_performance(model_type,track)
     elif model_type == 'gru':
         '''
@@ -2126,7 +2131,7 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
         model = gru_model(embedding_layer,dense)
-        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,validation_data=(X_val, y_val))
+        track = model.fit(X_train, y_train, epochs=3, batch_size=128,verbose=1,validation_data=(X_val, y_val))
         plot_performance(model_type,track)
     else:
         '''
@@ -2154,7 +2159,7 @@ def predict_model(input_shape,embedding_layer,model_type,X_train,y_train,X_val,y
         track = model.fit(X_train, y_train, batch_size=batch_size[i], epochs=epochs[j], verbose=1,validation_data=(X_val, y_val),callback=callbacks)
         '''
         model = gru_model2(embedding_layer,dense)
-        track = model.fit(X_train, y_train, epochs=20, batch_size=13,verbose=1,validation_data=(X_val, y_val))
+        track = model.fit(X_train, y_train, epochs=3, batch_size=128,verbose=1,validation_data=(X_val, y_val))
         plot_performance(model_type,track)
     #print("%.2f%% (+/- %.2f%%)" % (numpy.mean(cvscores), numpy.std(cvscores)))
     #model = None
@@ -2269,3 +2274,4 @@ def precision(y_true, y_pred):
 [7] Kaggle, Bert Carremans, Using Word Embeddings for Sentiment Analysis, https://www.kaggle.com/bertcarremans/using-word-embeddings-for-sentiment-analysis, visited april 11th 2019
 [8] Sentiment Analysis with pretrained Word2Vec, Varun Sharma, Kaggle, https://www.kaggle.com/varunsharmaml/sentiment-analysis-with-pretrained-word2vec, visited 12th of april 2019
 '''
+

@@ -1,2 +1,2 @@
 ,Accuracy:,Precision:,Recall:,F1 Score:
-resultlstm,0.6432,0.6325,0.5226,0.5724
+resultcnn2,0.6336,0.594,0.5976,0.5958
